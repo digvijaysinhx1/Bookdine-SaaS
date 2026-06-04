@@ -1,4 +1,4 @@
-exports.createReservation = async (cust) => {
+export const createReservation = async (cust) => {
   if (
     !cust.name ||
     !cust.date ||
@@ -20,14 +20,16 @@ exports.createReservation = async (cust) => {
   };
 };
 
-exports.getReservation = async ()=>{
-    return[{
-        id: 1,
-        name: "digvijay",
-        date: "2026-01-02",
-        time: "20:00",
-        phone: "9898566875",
-        guests: 2,
-        status: "CONFIRMED"
-    }]
-}
+export const getReservation = async () => {
+  return [
+    {
+      id: 1,
+      name: "digvijay",
+      date: "2026-01-02",
+      time: "20:00",
+      phone: "9898566875",
+      guests: 2,
+      status: "CONFIRMED",
+    },
+  ];
+};
