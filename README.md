@@ -58,6 +58,23 @@ Backend environment variables belong in:
 backend/.env
 ```
 
+Required Supabase backend variables:
+
+```text
+SUPABASE_URL
+SUPABASE_SERVICE_ROLE_KEY
+JWT_SECRET
+```
+
+Optional Supabase backend variables:
+
+```text
+SUPABASE_ANON_KEY
+SUPABASE_AUTH_ENABLED=true
+SUPABASE_REALTIME_ENABLED=false
+PORT
+```
+
 Frontend environment variables will belong in:
 
 ```text
@@ -65,6 +82,10 @@ frontend/.env
 ```
 
 Do not commit `.env` files. They are ignored by the root `.gitignore`.
+
+## Supabase Setup
+
+Run the SQL in `backend/migrations/001_supabase_reservations_realtime.sql` after confirming the existing `reservations` table uses the current `tenant_id`, `date`, `time`, and `status` columns. This adds the active reservation slot uniqueness guard and enables Supabase Realtime for reservation changes.
 
 ## Development Commands
 

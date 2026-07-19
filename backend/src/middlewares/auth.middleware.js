@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
+import { supabaseAdmin } from "../db/index.js";
 
-export default (req, res, next) => {
+export default async (req, res, next) => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -12,8 +13,20 @@ export default (req, res, next) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded;
-    next();
+    return next();
   } catch (err) {
-    return res.status(401).json({ success: false, message: "Invalid token" });
+    const { data, error } = await supabaseAdmin.auth.getUser(token);
+
+    if (error || !data.user) {
+      return res.status(401).json({ success: false, message: "Invalid token" });
+    }
+
+    req.user = {
+      id: data.user.id,
+      tenant_id: data.user.user_metadata?.tenant_id,
+      role: data.user.user_metadata?.role,
+    };
+
+    return next();
   }
 };

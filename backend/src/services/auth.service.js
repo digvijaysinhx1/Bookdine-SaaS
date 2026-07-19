@@ -1,6 +1,32 @@
-import pool from "../db/index.js";
+import { supabaseAdmin } from "../db/index.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+
+const isSupabaseAuthEnabled = () => process.env.SUPABASE_AUTH_ENABLED === "true";
+
+const createSupabaseAuthUser = async ({ email, password, name, phone, role, tenant_id }) => {
+  if (!isSupabaseAuthEnabled()) {
+    return null;
+  }
+
+  const { data, error } = await supabaseAdmin.auth.admin.createUser({
+    email,
+    password,
+    phone,
+    email_confirm: true,
+    user_metadata: {
+      name,
+      role,
+      tenant_id,
+    },
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data.user;
+};
 
 export const register = async (data) => {
   const { tenant_id, name, email, phone, role, password } = data;
@@ -10,23 +36,52 @@ export const register = async (data) => {
   }
 
   // Check if email already exists
-  const existing = await pool.query(
-    "SELECT id FROM users WHERE email = $1 AND tenant_id = $2",
-    [email, tenant_id]
-  );
-  if (existing.rows.length > 0) {
+  const { data: existing, error: existingError } = await supabaseAdmin
+    .from("users")
+    .select("id")
+    .eq("email", email)
+    .eq("tenant_id", tenant_id)
+    .maybeSingle();
+
+  if (existingError) {
+    throw new Error(existingError.message);
+  }
+
+  if (existing) {
     throw new Error("Email already registered");
   }
 
+  await createSupabaseAuthUser({
+    email,
+    password,
+    name,
+    phone,
+    role,
+    tenant_id,
+  });
+
   const hashedPassword = await bcrypt.hash(password, 10);
 
-  const result = await pool.query(
-    `INSERT INTO users (tenant_id, name, email, phone, role, password)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, email, role`,
-    [tenant_id, name, email, phone, role, hashedPassword]
-  );
+  const payload = {
+    tenant_id,
+    name,
+    email,
+    phone,
+    role,
+    password: hashedPassword,
+  };
 
-  return result.rows[0];
+  const { data: user, error } = await supabaseAdmin
+    .from("users")
+    .insert(payload)
+    .select("id, tenant_id, name, email, phone, role")
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return user;
 };
 
 export const login = async (data) => {
@@ -36,16 +91,20 @@ export const login = async (data) => {
     throw new Error("Email, password and tenant_id are required");
   }
 
-  const result = await pool.query(
-    "SELECT * FROM users WHERE email = $1 AND tenant_id = $2",
-    [email, tenant_id]
-  );
+  const { data: user, error } = await supabaseAdmin
+    .from("users")
+    .select("*")
+    .eq("email", email)
+    .eq("tenant_id", tenant_id)
+    .maybeSingle();
 
-  if (result.rows.length === 0) {
-    throw new Error("Invalid email or password");
+  if (error) {
+    throw new Error(error.message);
   }
 
-  const user = result.rows[0];
+  if (!user) {
+    throw new Error("Invalid email or password");
+  }
 
   const isMatch = await bcrypt.compare(password, user.password);
   if (!isMatch) {

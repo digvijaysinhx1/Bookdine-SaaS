@@ -1,12 +1,17 @@
-import pool from "./src/db/index.js";
+import { supabaseAdmin } from "./src/db/index.js";
 
 async function testConnection() {
-    try {
-        const res = await pool.query("SELECT NOW()");
-        console.log("db connection at: ", res.rows[0]);
-    } catch (err) {
-        console.error("db connection failed: ", err);
+  try {
+    const { error } = await supabaseAdmin.from("tenants").select("*").limit(1);
+
+    if (error) {
+      throw error;
     }
+
+    console.log("Supabase connection successful");
+  } catch (err) {
+    console.error("Supabase connection failed: ", err.message);
+  }
 }
 
 testConnection();
