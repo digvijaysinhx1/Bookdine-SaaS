@@ -1,8 +1,8 @@
 import { supabaseAdmin } from "../db/index.js";
 
-const ACTIVE_RESERVATION_STATUSES = ["PENDING", "CONFIRMED"];
+const ACTIVE_RESERVATION_STATUSES = ["pending", "confirmed"];
 
-const getTenantId = (reservation, user) => reservation.tenant_id || user?.tenant_id;
+const getTenantId = (reservation, user) => user?.tenant_id || reservation.tenant_id;
 
 const normalizeReservation = (reservation, user) => ({
   tenant_id: getTenantId(reservation, user),
@@ -56,8 +56,7 @@ export const getReservation = async ({ tenant_id } = {}) => {
   let query = supabaseAdmin
     .from("reservations")
     .select("*")
-    .order("date", { ascending: true })
-    .order("time", { ascending: true });
+    .order("reservation_start", { ascending: true });
 
   if (tenant_id) {
     query = query.eq("tenant_id", tenant_id);

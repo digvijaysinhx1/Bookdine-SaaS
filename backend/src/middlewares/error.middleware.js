@@ -1,8 +1,18 @@
 export default (err, req, res, next) => {
-  console.error(err.message);
+  const statusCode = err.statusCode || 500;
+  const isOperational = statusCode < 500;
 
-  res.status(500).json({
+  if (!isOperational) {
+    console.error(err);
+  }
+
+  res.status(statusCode).json({
     success: false,
-    message: err.message || "Internal Server Error",
+    error: {
+      code: err.code || (isOperational ? "REQUEST_FAILED" : "INTERNAL_SERVER_ERROR"),
+      message: isOperational
+        ? err.message
+        : "Internal Server Error",
+    },
   });
 };

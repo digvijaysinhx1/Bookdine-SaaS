@@ -1,121 +1,106 @@
 import { supabaseAdmin } from "../db/index.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import { isRestaurantRole } from "../config/roles.js";
+import { conflict, forbidden, unauthorized } from "../utils/httpError.js";
 
-const isSupabaseAuthEnabled = () => process.env.SUPABASE_AUTH_ENABLED === "true";
+const getJwtOptions = () => ({
+  expiresIn: process.env.JWT_ACCESS_EXPIRES_IN || "15m",
+  issuer: process.env.JWT_ISSUER || "bookdine-api",
+  audience: process.env.JWT_AUDIENCE || "bookdine-restaurant",
+});
 
-const createSupabaseAuthUser = async ({ email, password, name, phone, role, tenant_id }) => {
-  if (!isSupabaseAuthEnabled()) {
-    return null;
+const getJwtSecret = () => {
+  if (!process.env.JWT_SECRET) {
+    throw new Error("JWT_SECRET is required");
   }
 
-  const { data, error } = await supabaseAdmin.auth.admin.createUser({
-    email,
-    password,
-    phone,
-    email_confirm: true,
-    user_metadata: {
-      name,
-      role,
-      tenant_id,
-    },
-  });
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return data.user;
+  return process.env.JWT_SECRET;
 };
 
-export const register = async (data) => {
-  const { tenant_id, name, email, phone, role, password } = data;
+const isInactiveUser = (user) =>
+  user.is_active === false ||
+  user.active === false ||
+  ["INACTIVE", "DISABLED", "SUSPENDED"].includes(
+    String(user.status || "").toUpperCase()
+  );
 
-  if (!tenant_id || !name || !email || !password || !role) {
-    throw new Error("All fields are required");
-  }
+const getPasswordHash = (user) => user.password_hash || user.password;
 
-  // Check if email already exists
-  const { data: existing, error: existingError } = await supabaseAdmin
-    .from("users")
-    .select("id")
-    .eq("email", email)
-    .eq("tenant_id", tenant_id)
-    .maybeSingle();
+const buildPublicUser = (user) => ({
+  id: user.id,
+  tenant_id: user.tenant_id,
+  name: user.name,
+  email: user.email,
+  role: user.role,
+});
 
-  if (existingError) {
-    throw new Error(existingError.message);
-  }
-
-  if (existing) {
-    throw new Error("Email already registered");
-  }
-
-  await createSupabaseAuthUser({
-    email,
-    password,
-    name,
-    phone,
-    role,
-    tenant_id,
-  });
-
-  const hashedPassword = await bcrypt.hash(password, 10);
-
-  const payload = {
-    tenant_id,
-    name,
-    email,
-    phone,
-    role,
-    password: hashedPassword,
-  };
-
-  const { data: user, error } = await supabaseAdmin
-    .from("users")
-    .insert(payload)
-    .select("id, tenant_id, name, email, phone, role")
-    .single();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return user;
-};
-
-export const login = async (data) => {
-  const { email, password, tenant_id } = data;
-
-  if (!email || !password || !tenant_id) {
-    throw new Error("Email, password and tenant_id are required");
-  }
-
-  const { data: user, error } = await supabaseAdmin
+export const login = async ({ email, password }) => {
+  const { data: users, error } = await supabaseAdmin
     .from("users")
     .select("*")
     .eq("email", email)
-    .eq("tenant_id", tenant_id)
-    .maybeSingle();
+    .limit(2);
 
   if (error) {
     throw new Error(error.message);
   }
 
-  if (!user) {
-    throw new Error("Invalid email or password");
+  if (!users?.length) {
+    throw unauthorized("Invalid email or password", "INVALID_CREDENTIALS");
   }
 
-  const isMatch = await bcrypt.compare(password, user.password);
+  if (users.length > 1) {
+    throw conflict(
+      "Multiple accounts use this email. Contact support to resolve account ownership.",
+      "DUPLICATE_EMAIL"
+    );
+  }
+
+  const [user] = users;
+  const passwordHash = getPasswordHash(user);
+
+  if (!passwordHash) {
+    throw unauthorized("Invalid email or password", "INVALID_CREDENTIALS");
+  }
+
+  const isMatch = await bcrypt.compare(password, passwordHash);
   if (!isMatch) {
-    throw new Error("Invalid email or password");
+    throw unauthorized("Invalid email or password", "INVALID_CREDENTIALS");
   }
 
-  const token = jwt.sign(
-    { id: user.id, tenant_id: user.tenant_id, role: user.role },
-    process.env.JWT_SECRET,
-    { expiresIn: "7d" }
+  if (isInactiveUser(user)) {
+    throw forbidden("Account is inactive", "ACCOUNT_INACTIVE");
+  }
+
+  if (!user.tenant_id) {
+    throw forbidden("User is not assigned to a restaurant", "TENANT_REQUIRED");
+  }
+
+  if (!isRestaurantRole(user.role)) {
+    throw forbidden("Role is not allowed for restaurant access", "ROLE_NOT_ALLOWED");
+  }
+
+  const accessToken = jwt.sign(
+    {
+      sub: String(user.id),
+      user_id: user.id,
+      tenant_id: user.tenant_id,
+      role: user.role,
+      token_type: "access",
+    },
+    getJwtSecret(),
+    getJwtOptions()
   );
 
-  return { token, user: { id: user.id, name: user.name, email: user.email, role: user.role } };
+  return {
+    access_token: accessToken,
+    token_type: "Bearer",
+    expires_in: process.env.JWT_ACCESS_EXPIRES_IN || "15m",
+    user: buildPublicUser(user),
+  };
 };
+
+export const logout = async () => ({
+  message: "Logged out successfully. Discard the access token on the client.",
+});

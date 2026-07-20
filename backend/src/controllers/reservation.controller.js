@@ -15,7 +15,7 @@ export const createReservation = async (req, res, next) => {
 export const getReservation = async (req, res, next) => {
   try {
     const reservation = await reservationService.getReservation({
-      tenant_id: req.tenant_id || req.user?.tenant_id || req.query.tenant_id,
+      tenant_id: req.tenant_id,
     });
     res.status(200).json({
       success: true,
