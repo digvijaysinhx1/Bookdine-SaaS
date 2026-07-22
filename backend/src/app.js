@@ -1,6 +1,7 @@
 import express from "express";
 import authRoutes from "./routes/auth.routes.js";
 import reservationRoutes from "./routes/reservation.routes.js";
+import settingsRoutes from "./routes/settings.routes.js";
 import authMiddleware from "./middlewares/auth.middleware.js";
 import roleMiddleware from "./middlewares/role.middleware.js";
 import tenantMiddleware from "./middlewares/tenant.middleware.js";
@@ -36,6 +37,14 @@ app.use(
   roleMiddleware(RESTAURANT_ROLES),
   tenantMiddleware,
   reservationRoutes
+);
+
+app.use(
+  "/api/settings",
+  authMiddleware,
+  roleMiddleware(RESTAURANT_ROLES),
+  tenantMiddleware,
+  settingsRoutes
 );
 
 app.use((req, res, next) => {

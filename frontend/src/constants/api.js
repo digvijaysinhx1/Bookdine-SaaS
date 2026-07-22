@@ -5,3 +5,8 @@ export const AUTH_ENDPOINTS = {
   login: "/auth/login",
   logout: "/auth/logout",
 };
+
+export const SETTINGS_ENDPOINTS = {
+  get: "/settings",
+  update: "/settings",
+};

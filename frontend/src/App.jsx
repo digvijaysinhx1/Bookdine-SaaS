@@ -6,6 +6,7 @@ import AuthLayout from "./layouts/AuthLayout.jsx";
 import DashboardLayout from "./layouts/DashboardLayout.jsx";
 import Login from "./pages/auth/Login.jsx";
 import Dashboard from "./pages/dashboard/Dashboard.jsx";
+import Settings from "./pages/dashboard/Settings.jsx";
 import Loader from "./components/Loader.jsx";
 import ProtectedRoute from "./routes/ProtectedRoute.jsx";
 import PublicRoute from "./routes/PublicRoute.jsx";
@@ -44,6 +45,7 @@ const AppRoutes = () => {
       <Route element={<ProtectedRoute />}>
         <Route element={<DashboardLayout />}>
           <Route path={ROUTES.dashboard} element={<Dashboard />} />
+          <Route path={ROUTES.settings} element={<Settings />} />
         </Route>
       </Route>
 

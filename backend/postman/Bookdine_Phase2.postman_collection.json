@@ -1,0 +1,395 @@
+{
+  "info": {
+    "name": "Bookdine Phase 2 - Restaurant Settings",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "adminEmail", "value": "restaurant.admin@example.com" },
+    { "key": "adminPassword", "value": "ChangeMe123!" },
+    { "key": "restaurantBTenantId", "value": "replace-with-restaurant-b-tenant-id" },
+    { "key": "expiredToken", "value": "replace-with-expired-jwt" },
+    { "key": "accessToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "LOGIN - Successful Login",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/auth/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 200', () => pm.response.to.have.status(200));",
+            "const json = pm.response.json();",
+            "pm.test('login succeeds', () => pm.expect(json.success).to.eql(true));",
+            "pm.test('returns access token', () => pm.expect(json.data.access_token).to.be.a('string'));",
+            "pm.collectionVariables.set('accessToken', json.data.access_token);"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "GET SETTINGS - Successful Request",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": "{{baseUrl}}/api/settings"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 200', () => pm.response.to.have.status(200));",
+            "const json = pm.response.json();",
+            "pm.test('request succeeds', () => pm.expect(json.success).to.eql(true));",
+            "const fields = ['opening_time', 'closing_time', 'minimum_guests', 'maximum_guests', 'booking_window_days', 'cancellation_hours_before', 'email_confirmation', 'whatsapp_confirmation', 'is_active'];",
+            "fields.forEach((field) => pm.test(`returns ${field}`, () => pm.expect(json.data).to.have.property(field)));",
+            "pm.test('tenant_id is not exposed', () => pm.expect(json.data).to.not.have.property('tenant_id'));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "GET SETTINGS - Unauthorized Request",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/settings"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 401', () => pm.response.to.have.status(401));",
+            "pm.test('token required code', () => pm.expect(pm.response.json().error.code).to.eql('TOKEN_REQUIRED'));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "GET SETTINGS - Invalid Token",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer invalid-token" }],
+        "url": "{{baseUrl}}/api/settings"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 401', () => pm.response.to.have.status(401));",
+            "pm.test('invalid token code', () => pm.expect(pm.response.json().error.code).to.eql('INVALID_TOKEN'));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "GET SETTINGS - Expired Token",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{expiredToken}}" }],
+        "url": "{{baseUrl}}/api/settings"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 401', () => pm.response.to.have.status(401));",
+            "pm.test('expired token code', () => pm.expect(pm.response.json().error.code).to.eql('TOKEN_EXPIRED'));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "GET SETTINGS - Tenant Isolation",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": "{{baseUrl}}/api/settings?tenant_id={{restaurantBTenantId}}"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 403', () => pm.response.to.have.status(403));",
+            "pm.test('tenant forbidden code', () => pm.expect(pm.response.json().error.code).to.eql('TENANT_FORBIDDEN'));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "PUT SETTINGS - Successful Update",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/settings",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"opening_time\": \"09:00\",\n  \"closing_time\": \"22:00\",\n  \"minimum_guests\": 1,\n  \"maximum_guests\": 8,\n  \"booking_window_days\": 30,\n  \"cancellation_hours_before\": 2,\n  \"email_confirmation\": true,\n  \"whatsapp_confirmation\": false,\n  \"is_active\": true\n}"
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 200', () => pm.response.to.have.status(200));",
+            "const json = pm.response.json();",
+            "pm.test('request succeeds', () => pm.expect(json.success).to.eql(true));",
+            "pm.test('opening time updated', () => pm.expect(json.data.opening_time).to.eql('09:00'));",
+            "pm.test('closing time updated', () => pm.expect(json.data.closing_time).to.eql('22:00'));",
+            "pm.test('minimum guests updated', () => pm.expect(json.data.minimum_guests).to.eql(1));",
+            "pm.test('maximum guests updated', () => pm.expect(json.data.maximum_guests).to.eql(8));",
+            "pm.test('tenant_id is not exposed', () => pm.expect(json.data).to.not.have.property('tenant_id'));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "PUT SETTINGS - Invalid Opening Time",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/settings",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"opening_time\": \"22:00\",\n  \"closing_time\": \"09:00\",\n  \"minimum_guests\": 1,\n  \"maximum_guests\": 8,\n  \"booking_window_days\": 30,\n  \"cancellation_hours_before\": 2,\n  \"email_confirmation\": true,\n  \"whatsapp_confirmation\": false,\n  \"is_active\": true\n}"
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 400', () => pm.response.to.have.status(400));",
+            "pm.test('invalid opening hours code', () => pm.expect(pm.response.json().error.code).to.eql('INVALID_OPENING_HOURS'));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "PUT SETTINGS - Invalid Guest Limits",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/settings",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"opening_time\": \"09:00\",\n  \"closing_time\": \"22:00\",\n  \"minimum_guests\": 4,\n  \"maximum_guests\": 2,\n  \"booking_window_days\": 30,\n  \"cancellation_hours_before\": 2,\n  \"email_confirmation\": true,\n  \"whatsapp_confirmation\": false,\n  \"is_active\": true\n}"
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 400', () => pm.response.to.have.status(400));",
+            "pm.test('invalid guest limits code', () => pm.expect(pm.response.json().error.code).to.eql('INVALID_GUEST_LIMITS'));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "PUT SETTINGS - Invalid Booking Window",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/settings",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"opening_time\": \"09:00\",\n  \"closing_time\": \"22:00\",\n  \"minimum_guests\": 1,\n  \"maximum_guests\": 8,\n  \"booking_window_days\": 0,\n  \"cancellation_hours_before\": 2,\n  \"email_confirmation\": true,\n  \"whatsapp_confirmation\": false,\n  \"is_active\": true\n}"
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 400', () => pm.response.to.have.status(400));",
+            "pm.test('invalid booking window code', () => pm.expect(pm.response.json().error.code).to.eql('INVALID_BOOKING_WINDOW'));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "PUT SETTINGS - Invalid Cancellation Policy",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/settings",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"opening_time\": \"09:00\",\n  \"closing_time\": \"22:00\",\n  \"minimum_guests\": 1,\n  \"maximum_guests\": 8,\n  \"booking_window_days\": 30,\n  \"cancellation_hours_before\": -1,\n  \"email_confirmation\": true,\n  \"whatsapp_confirmation\": false,\n  \"is_active\": true\n}"
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 400', () => pm.response.to.have.status(400));",
+            "pm.test('invalid cancellation policy code', () => pm.expect(pm.response.json().error.code).to.eql('INVALID_CANCELLATION_POLICY'));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "PUT SETTINGS - Invalid Notification Preferences",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/settings",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"opening_time\": \"09:00\",\n  \"closing_time\": \"22:00\",\n  \"minimum_guests\": 1,\n  \"maximum_guests\": 8,\n  \"booking_window_days\": 30,\n  \"cancellation_hours_before\": 2,\n  \"email_confirmation\": false,\n  \"whatsapp_confirmation\": false,\n  \"is_active\": true\n}"
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 400', () => pm.response.to.have.status(400));",
+            "pm.test('invalid notification preferences code', () => pm.expect(pm.response.json().error.code).to.eql('INVALID_NOTIFICATION_PREFERENCES'));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "PUT SETTINGS - Missing Fields",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/settings",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"opening_time\": \"09:00\",\n  \"closing_time\": \"22:00\"\n}"
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 400', () => pm.response.to.have.status(400));",
+            "pm.test('missing fields code', () => pm.expect(pm.response.json().error.code).to.eql('MISSING_SETTINGS_FIELDS'));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "PUT SETTINGS - Unauthorized Access",
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/settings",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"opening_time\": \"09:00\",\n  \"closing_time\": \"22:00\",\n  \"minimum_guests\": 1,\n  \"maximum_guests\": 8,\n  \"booking_window_days\": 30,\n  \"cancellation_hours_before\": 2,\n  \"email_confirmation\": true,\n  \"whatsapp_confirmation\": false,\n  \"is_active\": true\n}"
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 401', () => pm.response.to.have.status(401));",
+            "pm.test('token required code', () => pm.expect(pm.response.json().error.code).to.eql('TOKEN_REQUIRED'));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "PUT SETTINGS - Invalid Token",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer invalid-token" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/settings",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"opening_time\": \"09:00\",\n  \"closing_time\": \"22:00\",\n  \"minimum_guests\": 1,\n  \"maximum_guests\": 8,\n  \"booking_window_days\": 30,\n  \"cancellation_hours_before\": 2,\n  \"email_confirmation\": true,\n  \"whatsapp_confirmation\": false,\n  \"is_active\": true\n}"
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 401', () => pm.response.to.have.status(401));",
+            "pm.test('invalid token code', () => pm.expect(pm.response.json().error.code).to.eql('INVALID_TOKEN'));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "PUT SETTINGS - Tenant Isolation Query",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/settings?tenant_id={{restaurantBTenantId}}",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"opening_time\": \"09:00\",\n  \"closing_time\": \"22:00\",\n  \"minimum_guests\": 1,\n  \"maximum_guests\": 8,\n  \"booking_window_days\": 30,\n  \"cancellation_hours_before\": 2,\n  \"email_confirmation\": true,\n  \"whatsapp_confirmation\": false,\n  \"is_active\": true\n}"
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 403', () => pm.response.to.have.status(403));",
+            "pm.test('tenant forbidden code', () => pm.expect(pm.response.json().error.code).to.eql('TENANT_FORBIDDEN'));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "PUT SETTINGS - Tenant Isolation Body",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/settings",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"tenant_id\": \"{{restaurantBTenantId}}\",\n  \"opening_time\": \"09:00\",\n  \"closing_time\": \"22:00\",\n  \"minimum_guests\": 1,\n  \"maximum_guests\": 8,\n  \"booking_window_days\": 30,\n  \"cancellation_hours_before\": 2,\n  \"email_confirmation\": true,\n  \"whatsapp_confirmation\": false,\n  \"is_active\": true\n}"
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 403', () => pm.response.to.have.status(403));",
+            "pm.test('tenant forbidden code', () => pm.expect(pm.response.json().error.code).to.eql('TENANT_FORBIDDEN'));"
+          ]
+        }
+      }]
+    }
+  ]
+}
