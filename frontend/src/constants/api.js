@@ -17,3 +17,8 @@ export const TABLES_ENDPOINTS = {
   update: (id) => `/tables/${id}`,
   delete: (id) => `/tables/${id}`,
 };
+
+export const AVAILABILITY_ENDPOINTS = {
+  getAvailability: "/availability",
+  getTimeSlots: "/time-slots",
+};

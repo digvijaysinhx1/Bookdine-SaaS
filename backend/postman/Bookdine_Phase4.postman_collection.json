@@ -1,0 +1,499 @@
+{
+  "info": {
+    "name": "Bookdine Phase 4 - Availability Engine",
+    "description": "Phase 4 backend-only Postman collection for GET /api/availability and GET /api/time-slots.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const pad = (value) => String(value).padStart(2, '0');",
+          "const formatDate = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;",
+          "const addDays = (days) => { const date = new Date(); date.setHours(0, 0, 0, 0); date.setDate(date.getDate() + days); return formatDate(date); };",
+          "pm.environment.set('phase4Today', addDays(0));",
+          "pm.environment.set('phase4Plus30', addDays(30));",
+          "pm.environment.set('phase4Plus31', addDays(31));"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "adminEmail", "value": "restaurant.admin@example.com" },
+    { "key": "adminPassword", "value": "ChangeMe123!" },
+    { "key": "accessToken", "value": "" },
+    { "key": "expiredToken", "value": "replace-with-expired-jwt" },
+    { "key": "restaurantBTenantId", "value": "replace-with-restaurant-b-tenant-id" },
+    { "key": "validGuests", "value": "2" },
+    { "key": "maxValidGuests", "value": "15" },
+    { "key": "invalidGuests", "value": "16" },
+    { "key": "noSuitableTableGuests", "value": "15" },
+    { "key": "closedReservationDate", "value": "2026-12-25" },
+    { "key": "weeklyOpenDate", "value": "replace-with-open-weekly-date" },
+    { "key": "weeklyClosedDate", "value": "replace-with-closed-weekly-date" },
+    { "key": "differentTimingDate", "value": "replace-with-different-timing-date" },
+    { "key": "fullyBookedDate", "value": "replace-with-fully-booked-date" }
+  ],
+  "item": [
+    {
+      "name": "01 - Authentication Setup",
+      "item": [
+        {
+          "name": "LOGIN - Successful Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('returns 200', () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "pm.test('login succeeds', () => pm.expect(json.success).to.eql(true));",
+                "pm.test('returns access token', () => pm.expect(json.data.access_token).to.be.a('string'));",
+                "pm.collectionVariables.set('accessToken', json.data.access_token);",
+                "pm.environment.set('accessToken', json.data.access_token);"
+              ]
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "02 - GET /api/availability",
+      "item": [
+        {
+          "name": "AVAILABILITY - Same Day Booking",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/availability?date={{phase4Today}}&guests={{validGuests}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('returns 200', () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "pm.test('request succeeds', () => pm.expect(json.success).to.eql(true));",
+                "pm.test('availability fields exist', () => { ['is_available', 'available_tables_count', 'total_available_slots', 'total_slots', 'reservation_duration_minutes', 'slot_interval_minutes', 'booking_window_days'].forEach((field) => pm.expect(json.data).to.have.property(field)); });",
+                "pm.test('uses locked duration and interval', () => { pm.expect(json.data.reservation_duration_minutes).to.eql(90); pm.expect(json.data.slot_interval_minutes).to.eql(30); });",
+                "pm.test('uses fixed 30 day window', () => pm.expect(json.data.booking_window_days).to.eql(30));",
+                "pm.test('does not expose table numbers or reservation internals', () => { pm.expect(json.data).to.not.have.property('table_number'); pm.expect(json.data).to.not.have.property('reservations'); });"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "AVAILABILITY - Booking Window Plus 30 Days",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/availability?date={{phase4Plus30}}&guests={{validGuests}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('returns 200 inside booking window', () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "pm.test('request succeeds', () => pm.expect(json.success).to.eql(true));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "AVAILABILITY - Booking Window Plus 31 Days",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/availability?date={{phase4Plus31}}&guests={{validGuests}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('returns 400 outside booking window', () => pm.response.to.have.status(400));",
+                "pm.test('booking window violation code', () => pm.expect(pm.response.json().error.code).to.eql('BOOKING_WINDOW_VIOLATION'));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "AVAILABILITY - Maximum Valid Guests",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/availability?date={{phase4Plus30}}&guests={{maxValidGuests}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('returns success or no suitable table response', () => pm.expect([200, 409]).to.include(pm.response.code));",
+                "const json = pm.response.json();",
+                "if (pm.response.code === 200) { pm.test('valid maximum guest count accepted', () => pm.expect(json.success).to.eql(true)); }",
+                "if (pm.response.code === 409) { pm.test('no suitable table is business-data dependent', () => pm.expect(json.error.code).to.eql('NO_AVAILABLE_TABLES')); }"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "AVAILABILITY - Invalid Guests 16",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/availability?date={{phase4Today}}&guests={{invalidGuests}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('returns 400', () => pm.response.to.have.status(400));",
+                "pm.test('maximum guests exceeded code', () => pm.expect(pm.response.json().error.code).to.eql('MAX_GUESTS_EXCEEDED'));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "AVAILABILITY - No Available Tables",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/availability?date={{phase4Plus30}}&guests={{noSuitableTableGuests}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('returns either availability or no-table result based on seed data', () => pm.expect([200, 409]).to.include(pm.response.code));",
+                "const json = pm.response.json();",
+                "if (pm.response.code === 409) { pm.test('no available tables code', () => pm.expect(json.error.code).to.eql('NO_AVAILABLE_TABLES')); }",
+                "if (pm.response.code === 200) { pm.test('response remains tenant-safe', () => { pm.expect(json.data).to.not.have.property('table_number'); pm.expect(json.data).to.not.have.property('table_id'); }); }"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "AVAILABILITY - Fully Booked Date",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/availability?date={{fullyBookedDate}}&guests={{validGuests}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('returns 200 for configured fully booked date', () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "pm.test('fully booked means no available slots', () => { pm.expect(json.data.is_available).to.eql(false); pm.expect(json.data.total_available_slots).to.eql(0); });"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "AVAILABILITY - Closed Reservation Date",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/availability?date={{closedReservationDate}}&guests={{validGuests}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('returns closed date response', () => pm.expect([400, 409]).to.include(pm.response.code));",
+                "pm.test('closed date code', () => pm.expect(pm.response.json().error.code).to.eql('RESERVATION_DATE_CLOSED'));"
+              ]
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "03 - GET /api/time-slots",
+      "item": [
+        {
+          "name": "TIME SLOTS - Same Day Excludes Past Slots",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/time-slots?date={{phase4Today}}&guests={{validGuests}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('returns 200', () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "pm.test('request succeeds', () => pm.expect(json.success).to.eql(true));",
+                "pm.test('returns slots array', () => pm.expect(json.data.slots).to.be.an('array'));",
+                "pm.test('slot shape is safe', () => { if (json.data.slots.length) { const slot = json.data.slots[0]; ['time', 'start_time', 'end_time', 'is_available', 'available_tables_count'].forEach((field) => pm.expect(slot).to.have.property(field)); pm.expect(slot).to.not.have.property('table_id'); pm.expect(slot).to.not.have.property('table_number'); } });",
+                "pm.test('same-day slots are not in the past', () => { const now = new Date(); const currentMinutes = now.getHours() * 60 + now.getMinutes(); json.data.slots.forEach((slot) => { const [h, m] = slot.start_time.split(':').map(Number); pm.expect(h * 60 + m).to.be.above(currentMinutes); }); });"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "TIME SLOTS - Last Slot Validation",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/time-slots?date={{phase4Plus30}}&guests={{validGuests}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('returns 200', () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "pm.test('all slots use 90 minute duration', () => json.data.slots.forEach((slot) => { const [sh, sm] = slot.start_time.split(':').map(Number); const [eh, em] = slot.end_time.split(':').map(Number); pm.expect((eh * 60 + em) - (sh * 60 + sm)).to.eql(90); }));",
+                "pm.test('slots are spaced by 30 minutes', () => { for (let i = 1; i < json.data.slots.length; i += 1) { const prev = json.data.slots[i - 1].start_time.split(':').map(Number); const curr = json.data.slots[i].start_time.split(':').map(Number); pm.expect((curr[0] * 60 + curr[1]) - (prev[0] * 60 + prev[1])).to.eql(30); } });"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "TIME SLOTS - Weekly Open Date",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/time-slots?date={{weeklyOpenDate}}&guests={{validGuests}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('returns 200 for weekly open date', () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "pm.test('open date returns generated slots', () => pm.expect(json.data.slots.length).to.be.above(0));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "TIME SLOTS - Weekly Closed Date",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/time-slots?date={{weeklyClosedDate}}&guests={{validGuests}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('returns closed response', () => pm.response.to.have.status(409));",
+                "pm.test('restaurant closed code', () => pm.expect(pm.response.json().error.code).to.eql('RESTAURANT_CLOSED'));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "TIME SLOTS - Different Timings Date",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/time-slots?date={{differentTimingDate}}&guests={{validGuests}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('returns 200 for different timing date', () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "pm.test('slots are generated from configured timing', () => pm.expect(json.data.slots).to.be.an('array'));",
+                "pm.test('slot metadata uses locked rules', () => { pm.expect(json.data.reservation_duration_minutes).to.eql(90); pm.expect(json.data.slot_interval_minutes).to.eql(30); });"
+              ]
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "04 - Security And Validation",
+      "item": [
+        {
+          "name": "AVAILABILITY - Unauthorized Request",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/availability?date={{phase4Today}}&guests={{validGuests}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('returns 401', () => pm.response.to.have.status(401));",
+                "pm.test('token required code', () => pm.expect(pm.response.json().error.code).to.eql('TOKEN_REQUIRED'));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "TIME SLOTS - Unauthorized Request",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/time-slots?date={{phase4Today}}&guests={{validGuests}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('returns 401', () => pm.response.to.have.status(401));",
+                "pm.test('token required code', () => pm.expect(pm.response.json().error.code).to.eql('TOKEN_REQUIRED'));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "AVAILABILITY - Invalid Token",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer invalid-token" }],
+            "url": "{{baseUrl}}/api/availability?date={{phase4Today}}&guests={{validGuests}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('returns 401', () => pm.response.to.have.status(401));",
+                "pm.test('invalid token code', () => pm.expect(pm.response.json().error.code).to.eql('INVALID_TOKEN'));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "TIME SLOTS - Invalid Token",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer invalid-token" }],
+            "url": "{{baseUrl}}/api/time-slots?date={{phase4Today}}&guests={{validGuests}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('returns 401', () => pm.response.to.have.status(401));",
+                "pm.test('invalid token code', () => pm.expect(pm.response.json().error.code).to.eql('INVALID_TOKEN'));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "AVAILABILITY - Expired Token",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{expiredToken}}" }],
+            "url": "{{baseUrl}}/api/availability?date={{phase4Today}}&guests={{validGuests}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('returns 401', () => pm.response.to.have.status(401));",
+                "pm.test('expired token code', () => pm.expect(pm.response.json().error.code).to.eql('TOKEN_EXPIRED'));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "TIME SLOTS - Expired Token",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{expiredToken}}" }],
+            "url": "{{baseUrl}}/api/time-slots?date={{phase4Today}}&guests={{validGuests}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('returns 401', () => pm.response.to.have.status(401));",
+                "pm.test('expired token code', () => pm.expect(pm.response.json().error.code).to.eql('TOKEN_EXPIRED'));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "AVAILABILITY - Tenant Isolation Query",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/availability?date={{phase4Today}}&guests={{validGuests}}&tenant_id={{restaurantBTenantId}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('returns 403', () => pm.response.to.have.status(403));",
+                "pm.test('tenant forbidden code', () => pm.expect(pm.response.json().error.code).to.eql('TENANT_FORBIDDEN'));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "TIME SLOTS - Tenant Isolation Header",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "x-tenant-id", "value": "{{restaurantBTenantId}}" }
+            ],
+            "url": "{{baseUrl}}/api/time-slots?date={{phase4Today}}&guests={{validGuests}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('returns 403', () => pm.response.to.have.status(403));",
+                "pm.test('tenant forbidden code', () => pm.expect(pm.response.json().error.code).to.eql('TENANT_FORBIDDEN'));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "AVAILABILITY - Invalid Date",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/availability?date=not-a-date&guests={{validGuests}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('returns 400', () => pm.response.to.have.status(400));",
+                "pm.test('invalid date code', () => pm.expect(pm.response.json().error.code).to.eql('INVALID_DATE'));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "TIME SLOTS - Invalid Guest Count",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/time-slots?date={{phase4Today}}&guests=abc"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('returns 400', () => pm.response.to.have.status(400));",
+                "pm.test('invalid guest count code', () => pm.expect(pm.response.json().error.code).to.eql('INVALID_GUEST_COUNT'));"
+              ]
+            }
+          }]
+        }
+      ]
+    }
+  ]
+}
