@@ -1,0 +1,403 @@
+{
+  "info": {
+    "name": "Bookdine Phase 3 - Table Management",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "adminEmail", "value": "restaurant.admin@example.com" },
+    { "key": "adminPassword", "value": "ChangeMe123!" },
+    { "key": "restaurantBTenantId", "value": "replace-with-restaurant-b-tenant-id" },
+    { "key": "expiredToken", "value": "replace-with-expired-jwt" },
+    { "key": "accessToken", "value": "" },
+    { "key": "tableId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "LOGIN - Successful Login",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/auth/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 200', () => pm.response.to.have.status(200));",
+            "const json = pm.response.json();",
+            "pm.test('login succeeds', () => pm.expect(json.success).to.eql(true));",
+            "pm.collectionVariables.set('accessToken', json.data.access_token);"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "GET TABLES - Successful Request",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": "{{baseUrl}}/api/tables"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 200', () => pm.response.to.have.status(200));",
+            "const json = pm.response.json();",
+            "pm.test('request succeeds', () => pm.expect(json.success).to.eql(true));",
+            "pm.test('returns an array', () => pm.expect(json.data).to.be.an('array'));",
+            "if (json.data.length) { const table = json.data[0]; ['id', 'table_number', 'capacity', 'location', 'is_active'].forEach((field) => pm.expect(table).to.have.property(field)); pm.expect(table).to.not.have.property('tenant_id'); }"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "GET TABLES - Unauthorized Request",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/tables"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 401', () => pm.response.to.have.status(401));",
+            "pm.test('token required code', () => pm.expect(pm.response.json().error.code).to.eql('TOKEN_REQUIRED'));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "GET TABLES - Invalid Token",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer invalid-token" }],
+        "url": "{{baseUrl}}/api/tables"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 401', () => pm.response.to.have.status(401));",
+            "pm.test('invalid token code', () => pm.expect(pm.response.json().error.code).to.eql('INVALID_TOKEN'));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "GET TABLES - Tenant Isolation",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": "{{baseUrl}}/api/tables?tenant_id={{restaurantBTenantId}}"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 403', () => pm.response.to.have.status(403));",
+            "pm.test('tenant forbidden code', () => pm.expect(pm.response.json().error.code).to.eql('TENANT_FORBIDDEN'));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "CREATE TABLE - Successful Creation",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/tables",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"table_number\": \"Table-1\",\n  \"capacity\": 2,\n  \"location\": \"Indoor\"\n}"
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 201', () => pm.response.to.have.status(201));",
+            "const json = pm.response.json();",
+            "pm.test('request succeeds', () => pm.expect(json.success).to.eql(true));",
+            "pm.test('defaults active', () => pm.expect(json.data.is_active).to.eql(true));",
+            "pm.test('tenant_id is not exposed', () => pm.expect(json.data).to.not.have.property('tenant_id'));",
+            "pm.collectionVariables.set('tableId', json.data.id);"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "CREATE TABLE - Duplicate Table Number",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/tables",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"table_number\": \"Table-1\",\n  \"capacity\": 4,\n  \"location\": \"Outdoor\"\n}"
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 409', () => pm.response.to.have.status(409));",
+            "pm.test('duplicate code', () => pm.expect(pm.response.json().error.code).to.eql('DUPLICATE_TABLE_NUMBER'));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "CREATE TABLE - Invalid Capacity",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/tables",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"table_number\": \"Table-Invalid\",\n  \"capacity\": 0,\n  \"location\": \"Indoor\"\n}"
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 400', () => pm.response.to.have.status(400));",
+            "pm.test('invalid capacity code', () => pm.expect(pm.response.json().error.code).to.eql('INVALID_TABLE_CAPACITY'));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "CREATE TABLE - Missing Fields",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/tables",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"table_number\": \"Table-Missing\"\n}"
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 400', () => pm.response.to.have.status(400));",
+            "pm.test('missing fields code', () => pm.expect(pm.response.json().error.code).to.eql('MISSING_TABLE_FIELDS'));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "CREATE TABLE - Invalid Token",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer invalid-token" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/tables",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"table_number\": \"Table-2\",\n  \"capacity\": 4,\n  \"location\": \"Outdoor\"\n}"
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 401', () => pm.response.to.have.status(401));",
+            "pm.test('invalid token code', () => pm.expect(pm.response.json().error.code).to.eql('INVALID_TOKEN'));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "UPDATE TABLE - Successful Update",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/tables/{{tableId}}",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"capacity\": 4,\n  \"location\": \"Window Side\",\n  \"is_active\": false\n}"
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 200', () => pm.response.to.have.status(200));",
+            "const json = pm.response.json();",
+            "pm.test('request succeeds', () => pm.expect(json.success).to.eql(true));",
+            "pm.test('capacity updated', () => pm.expect(json.data.capacity).to.eql(4));",
+            "pm.test('location updated', () => pm.expect(json.data.location).to.eql('Window Side'));",
+            "pm.test('active flag updated', () => pm.expect(json.data.is_active).to.eql(false));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "UPDATE TABLE - Invalid Capacity",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/tables/{{tableId}}",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"capacity\": -2\n}"
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 400', () => pm.response.to.have.status(400));",
+            "pm.test('invalid capacity code', () => pm.expect(pm.response.json().error.code).to.eql('INVALID_TABLE_CAPACITY'));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "UPDATE TABLE - Unauthorized Access",
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseUrl}}/api/tables/{{tableId}}",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"capacity\": 6\n}"
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 401', () => pm.response.to.have.status(401));",
+            "pm.test('token required code', () => pm.expect(pm.response.json().error.code).to.eql('TOKEN_REQUIRED'));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "UPDATE TABLE - Invalid Token",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer invalid-token" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{baseUrl}}/api/tables/{{tableId}}",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"capacity\": 6\n}"
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 401', () => pm.response.to.have.status(401));",
+            "pm.test('invalid token code', () => pm.expect(pm.response.json().error.code).to.eql('INVALID_TOKEN'));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "DELETE TABLE - Successful Deletion",
+      "request": {
+        "method": "DELETE",
+        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "url": "{{baseUrl}}/api/tables/{{tableId}}"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 200', () => pm.response.to.have.status(200));",
+            "const json = pm.response.json();",
+            "pm.test('request succeeds', () => pm.expect(json.success).to.eql(true));",
+            "pm.test('deleted flag returned', () => pm.expect(json.data.deleted).to.eql(true));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "DELETE TABLE - Unauthorized Access",
+      "request": {
+        "method": "DELETE",
+        "url": "{{baseUrl}}/api/tables/{{tableId}}"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 401', () => pm.response.to.have.status(401));",
+            "pm.test('token required code', () => pm.expect(pm.response.json().error.code).to.eql('TOKEN_REQUIRED'));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "DELETE TABLE - Invalid Token",
+      "request": {
+        "method": "DELETE",
+        "header": [{ "key": "Authorization", "value": "Bearer invalid-token" }],
+        "url": "{{baseUrl}}/api/tables/{{tableId}}"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 401', () => pm.response.to.have.status(401));",
+            "pm.test('invalid token code', () => pm.expect(pm.response.json().error.code).to.eql('INVALID_TOKEN'));"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "DELETE TABLE - Tenant Isolation",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "x-tenant-id", "value": "{{restaurantBTenantId}}" }
+        ],
+        "url": "{{baseUrl}}/api/tables/{{tableId}}"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "exec": [
+            "pm.test('returns 403', () => pm.response.to.have.status(403));",
+            "pm.test('tenant forbidden code', () => pm.expect(pm.response.json().error.code).to.eql('TENANT_FORBIDDEN'));"
+          ]
+        }
+      }]
+    }
+  ]
+}

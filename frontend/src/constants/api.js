@@ -10,3 +10,10 @@ export const SETTINGS_ENDPOINTS = {
   get: "/settings",
   update: "/settings",
 };
+
+export const TABLES_ENDPOINTS = {
+  getAll: "/tables",
+  create: "/tables",
+  update: (id) => `/tables/${id}`,
+  delete: (id) => `/tables/${id}`,
+};

@@ -44,6 +44,10 @@ const Sidebar = ({ isOpen, onClose }) => {
             <DashboardIcon />
             Dashboard
           </NavLink>
+          <NavLink to={ROUTES.tables} className={navLinkClasses} onClick={onClose}>
+            <TablesIcon />
+            Tables
+          </NavLink>
           <NavLink to={ROUTES.settings} className={navLinkClasses} onClick={onClose}>
             <SettingsIcon />
             Restaurant Settings
@@ -79,6 +83,23 @@ const DashboardIcon = () => (
       strokeLinejoin="round"
       strokeWidth={1.75}
       d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4"
+    />
+  </svg>
+);
+
+const TablesIcon = () => (
+  <svg
+    className="h-5 w-5"
+    fill="none"
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+    aria-hidden="true"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={1.75}
+      d="M4 6h16M4 10h16M4 14h16M4 18h16"
     />
   </svg>
 );
