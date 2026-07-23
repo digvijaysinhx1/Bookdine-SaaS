@@ -1,0 +1,626 @@
+{
+  "info": {
+    "name": "Bookdine Phase 5 - Reservations",
+    "description": "Phase 5 backend-only Postman collection for reservation engine testing.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const pad = (value) => String(value).padStart(2, '0');",
+          "const formatDate = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;",
+          "const addDays = (days) => { const date = new Date(); date.setHours(0, 0, 0, 0); date.setDate(date.getDate() + days); return formatDate(date); };",
+          "const roundToNextSlot = () => { const now = new Date(); let minutes = now.getHours() * 60 + now.getMinutes(); minutes = Math.ceil(minutes / 30) * 30 + 30; if (minutes > 22 * 60) { minutes = 20 * 60; } return `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`; };",
+          "if (!pm.environment.get('phase5RunId')) { pm.environment.set('phase5RunId', String(Date.now()).slice(-6)); }",
+          "const runId = pm.environment.get('phase5RunId');",
+          "pm.environment.set('phase5Today', addDays(0));",
+          "pm.environment.set('phase5Tomorrow', addDays(1));",
+          "pm.environment.set('phase5Plus7', addDays(7));",
+          "if (!pm.environment.get('availableDate')) { pm.environment.set('availableDate', addDays(7)); }",
+          "if (!pm.environment.get('doubleBookingDate')) { pm.environment.set('doubleBookingDate', addDays(7)); }",
+          "if (!pm.environment.get('sameDaySlot')) { pm.environment.set('sameDaySlot', roundToNextSlot()); }",
+          "if (pm.environment.get('phoneNumber') === '+919000005001') { pm.environment.set('phoneNumber', `+919000${runId}`); }",
+          "if (pm.environment.get('activeLimitPhone') === '+919000005777') { pm.environment.set('activeLimitPhone', `+919777${runId}`); }",
+          "if (pm.environment.get('doubleBookingPhone1') === '+919000005881') { pm.environment.set('doubleBookingPhone1', `+919881${runId}`); }",
+          "if (pm.environment.get('doubleBookingPhone2') === '+919000005882') { pm.environment.set('doubleBookingPhone2', `+919882${runId}`); }"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "adminEmail", "value": "restaurant.admin@example.com" },
+    { "key": "adminPassword", "value": "ChangeMe123!" },
+    { "key": "accessToken", "value": "" },
+    { "key": "reservationId", "value": "" },
+    { "key": "cancellableReservationId", "value": "" },
+    { "key": "tenantIsolationReservationId", "value": "1" }
+  ],
+  "item": [
+    {
+      "name": "01 - Authentication Setup",
+      "item": [
+        {
+          "name": "LOGIN - Restaurant User",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('returns 200', () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "pm.test('login succeeds', () => pm.expect(json.success).to.eql(true));",
+                "pm.test('returns access token', () => pm.expect(json.data.access_token).to.be.a('string'));",
+                "pm.environment.set('accessToken', json.data.access_token);",
+                "pm.collectionVariables.set('accessToken', json.data.access_token);"
+              ]
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "02 - Core Reservation APIs",
+      "item": [
+        {
+          "name": "RESERVATION - Create Reservation",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/api/reservations",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"guest_name\": \"{{guestName}}\",\n  \"phone_number\": \"{{phoneNumber}}\",\n  \"email\": \"{{email}}\",\n  \"guests\": {{guests}},\n  \"date\": \"{{availableDate}}\",\n  \"slot\": \"{{availableSlot}}\",\n  \"source\": \"{{reservationSource}}\",\n  \"special_notes\": \"Phase 5 Postman create reservation test\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('returns 201', () => pm.response.to.have.status(201));",
+                "const json = pm.response.json();",
+                "pm.test('request succeeds', () => pm.expect(json.success).to.eql(true));",
+                "pm.test('reservation is confirmed', () => pm.expect(json.data.status).to.eql('CONFIRMED'));",
+                "pm.test('required fields returned', () => { ['id', 'guest_name', 'phone_number', 'email', 'guests', 'date', 'slot', 'source', 'status'].forEach((field) => pm.expect(json.data).to.have.property(field)); });",
+                "pm.environment.set('reservationId', json.data.id);",
+                "pm.collectionVariables.set('reservationId', json.data.id);"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "RESERVATION - Get All Reservations",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/reservations"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('returns 200', () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "pm.test('request succeeds', () => pm.expect(json.success).to.eql(true));",
+                "pm.test('returns reservations array', () => pm.expect(json.data).to.be.an('array'));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "RESERVATION - Get Reservation By Id",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/reservations/{{reservationId}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('returns 200', () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "pm.test('request succeeds', () => pm.expect(json.success).to.eql(true));",
+                "pm.test('returns selected reservation', () => pm.expect(String(json.data.id)).to.eql(String(pm.environment.get('reservationId'))));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "RESERVATION - Change Status To Seated",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/api/reservations/{{reservationId}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"SEATED\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('returns 200', () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "pm.test('status changed to SEATED', () => pm.expect(json.data.status).to.eql('SEATED'));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "RESERVATION - Change Status To Completed",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/api/reservations/{{reservationId}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"COMPLETED\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('returns 200', () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "pm.test('status changed to COMPLETED', () => pm.expect(json.data.status).to.eql('COMPLETED'));"
+              ]
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "03 - Cancellation",
+      "item": [
+        {
+          "name": "RESERVATION - Create Cancellable Reservation",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/api/reservations",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"guest_name\": \"Phase Five Cancel Guest\",\n  \"phone_number\": \"{{phoneNumber}}99\",\n  \"email\": \"phase5.cancel@example.com\",\n  \"guests\": {{guests}},\n  \"date\": \"{{phase5Plus7}}\",\n  \"slot\": \"{{activeLimitSlot1}}\",\n  \"source\": \"Calls\",\n  \"special_notes\": \"Phase 5 cancellation setup\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('returns 201', () => pm.response.to.have.status(201));",
+                "const json = pm.response.json();",
+                "pm.environment.set('cancellableReservationId', json.data.id);",
+                "pm.collectionVariables.set('cancellableReservationId', json.data.id);"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "RESERVATION - Cancel Reservation",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/reservations/{{cancellableReservationId}}/cancel"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('returns 200', () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "pm.test('status changed to CANCELLED', () => pm.expect(json.data.status).to.eql('CANCELLED'));"
+              ]
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "04 - Validation And Business Rules",
+      "item": [
+        {
+          "name": "RESERVATION - Same Day Reservation",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/api/reservations",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"guest_name\": \"Phase Five Same Day\",\n  \"phone_number\": \"{{phoneNumber}}55\",\n  \"email\": \"phase5.sameday@example.com\",\n  \"guests\": {{guests}},\n  \"date\": \"{{phase5Today}}\",\n  \"slot\": \"{{sameDaySlot}}\",\n  \"source\": \"Walk In\",\n  \"special_notes\": \"Same day reservation test\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('same-day request returns business result', () => pm.expect([201, 400, 409]).to.include(pm.response.code));",
+                "const json = pm.response.json();",
+                "if (pm.response.code === 201) { pm.test('same-day booking allowed', () => pm.expect(json.data.status).to.eql('CONFIRMED')); }",
+                "if (pm.response.code !== 201) { pm.test('same-day failure is availability/data dependent', () => pm.expect(json.success).to.eql(false)); }"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "RESERVATION - Maximum Guest Validation",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/api/reservations",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"guest_name\": \"Phase Five Max Guests\",\n  \"phone_number\": \"{{phoneNumber}}66\",\n  \"email\": \"phase5.maxguests@example.com\",\n  \"guests\": {{maximumGuestCount}},\n  \"date\": \"{{availableDate}}\",\n  \"slot\": \"{{activeLimitSlot2}}\",\n  \"source\": \"Instagram\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('returns maximum guest validation error', () => pm.response.to.have.status(400));",
+                "pm.test('maximum guests exceeded code', () => pm.expect(pm.response.json().error.code).to.eql('MAX_GUESTS_EXCEEDED'));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "RESERVATION - Weekly Closure Validation",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/api/reservations",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"guest_name\": \"Phase Five Weekly Closed\",\n  \"phone_number\": \"{{phoneNumber}}77\",\n  \"email\": \"phase5.weeklyclosed@example.com\",\n  \"guests\": {{guests}},\n  \"date\": \"{{closedWeeklyDate}}\",\n  \"slot\": \"{{availableSlot}}\",\n  \"source\": \"Google Maps\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('returns 409', () => pm.response.to.have.status(409));",
+                "pm.test('restaurant closed code', () => pm.expect(pm.response.json().error.code).to.eql('RESTAURANT_CLOSED'));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "RESERVATION - Closed Reservation Date",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/api/reservations",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"guest_name\": \"Phase Five Closed Date\",\n  \"phone_number\": \"{{phoneNumber}}88\",\n  \"email\": \"phase5.closeddate@example.com\",\n  \"guests\": {{guests}},\n  \"date\": \"{{closedReservationDate}}\",\n  \"slot\": \"{{availableSlot}}\",\n  \"source\": \"Zomato\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('returns 409', () => pm.response.to.have.status(409));",
+                "pm.test('closed date code', () => pm.expect(pm.response.json().error.code).to.eql('RESERVATION_DATE_CLOSED'));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "RESERVATION - Active Limit Create 1",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/api/reservations",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"guest_name\": \"Active Limit One\",\n  \"phone_number\": \"{{activeLimitPhone}}\",\n  \"email\": \"active.limit1@example.com\",\n  \"guests\": {{guests}},\n  \"date\": \"{{phase5Tomorrow}}\",\n  \"slot\": \"{{activeLimitSlot1}}\",\n  \"source\": \"Custom Source\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": ["pm.test('returns 201', () => pm.response.to.have.status(201));"]
+            }
+          }]
+        },
+        {
+          "name": "RESERVATION - Active Limit Create 2",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/api/reservations",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"guest_name\": \"Active Limit Two\",\n  \"phone_number\": \"{{activeLimitPhone}}\",\n  \"email\": \"active.limit2@example.com\",\n  \"guests\": {{guests}},\n  \"date\": \"{{phase5Tomorrow}}\",\n  \"slot\": \"{{activeLimitSlot2}}\",\n  \"source\": \"Custom Source\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": ["pm.test('returns 201', () => pm.response.to.have.status(201));"]
+            }
+          }]
+        },
+        {
+          "name": "RESERVATION - Active Limit Create 3",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/api/reservations",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"guest_name\": \"Active Limit Three\",\n  \"phone_number\": \"{{activeLimitPhone}}\",\n  \"email\": \"active.limit3@example.com\",\n  \"guests\": {{guests}},\n  \"date\": \"{{phase5Plus7}}\",\n  \"slot\": \"{{activeLimitSlot3}}\",\n  \"source\": \"Custom Source\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": ["pm.test('returns 201', () => pm.response.to.have.status(201));"]
+            }
+          }]
+        },
+        {
+          "name": "RESERVATION - Active Limit Create 4 Rejected",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/api/reservations",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"guest_name\": \"Active Limit Four\",\n  \"phone_number\": \"{{activeLimitPhone}}\",\n  \"email\": \"active.limit4@example.com\",\n  \"guests\": {{guests}},\n  \"date\": \"{{phase5Plus7}}\",\n  \"slot\": \"{{activeLimitSlot4}}\",\n  \"source\": \"Custom Source\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('returns 409', () => pm.response.to.have.status(409));",
+                "pm.test('active limit code', () => pm.expect(pm.response.json().error.code).to.eql('ACTIVE_RESERVATION_LIMIT_EXCEEDED'));"
+              ]
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "05 - Availability And Double Booking",
+      "item": [
+        {
+          "name": "AVAILABILITY - Before Reservation",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/time-slots?date={{doubleBookingDate}}&guests={{guests}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('returns 200', () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "pm.test('availability engine returns slots', () => pm.expect(json.data.slots).to.be.an('array'));",
+                "pm.test('locked duration and interval', () => { pm.expect(json.data.reservation_duration_minutes).to.eql(90); pm.expect(json.data.slot_interval_minutes).to.eql(30); });"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "RESERVATION - Double Booking First Reservation",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/api/reservations",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"guest_name\": \"Double Booking One\",\n  \"phone_number\": \"{{doubleBookingPhone1}}\",\n  \"email\": \"double.booking1@example.com\",\n  \"guests\": {{guests}},\n  \"date\": \"{{doubleBookingDate}}\",\n  \"slot\": \"{{doubleBookingSlot}}\",\n  \"source\": \"Widget\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": ["pm.test('returns 201', () => pm.response.to.have.status(201));"]
+            }
+          }]
+        },
+        {
+          "name": "RESERVATION - Double Booking Second Reservation Rejected",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/api/reservations",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"guest_name\": \"Double Booking Two\",\n  \"phone_number\": \"{{doubleBookingPhone2}}\",\n  \"email\": \"double.booking2@example.com\",\n  \"guests\": {{guests}},\n  \"date\": \"{{doubleBookingDate}}\",\n  \"slot\": \"{{doubleBookingSlot}}\",\n  \"source\": \"Widget\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('returns 409 when slot/table capacity is exhausted', () => pm.response.to.have.status(409));",
+                "pm.test('slot unavailable code', () => pm.expect(pm.response.json().error.code).to.eql('SLOT_UNAVAILABLE'));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "AVAILABILITY - After Reservation",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/time-slots?date={{doubleBookingDate}}&guests={{guests}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('returns 200', () => pm.response.to.have.status(200));",
+                "const json = pm.response.json();",
+                "const slot = json.data.slots.find((item) => item.time === pm.environment.get('doubleBookingSlot'));",
+                "pm.test('reserved slot is represented by availability engine', () => pm.expect(slot).to.not.eql(undefined));"
+              ]
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "06 - Security",
+      "item": [
+        {
+          "name": "RESERVATION - Unauthorized Get All",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/reservations"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('returns 401', () => pm.response.to.have.status(401));",
+                "pm.test('token required code', () => pm.expect(pm.response.json().error.code).to.eql('TOKEN_REQUIRED'));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "RESERVATION - Unauthorized Create",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/reservations",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"guest_name\": \"Unauthorized Guest\",\n  \"phone_number\": \"+919111111111\",\n  \"email\": \"unauthorized@example.com\",\n  \"guests\": 2,\n  \"date\": \"{{availableDate}}\",\n  \"slot\": \"{{availableSlot}}\",\n  \"source\": \"Walk In\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('returns 401', () => pm.response.to.have.status(401));",
+                "pm.test('token required code', () => pm.expect(pm.response.json().error.code).to.eql('TOKEN_REQUIRED'));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "RESERVATION - Tenant Isolation Query",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": "{{baseUrl}}/api/reservations?tenant_id={{restaurantBTenantId}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('returns 403', () => pm.response.to.have.status(403));",
+                "pm.test('tenant forbidden code', () => pm.expect(pm.response.json().error.code).to.eql('TENANT_FORBIDDEN'));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "RESERVATION - Tenant Isolation Header",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "x-tenant-id", "value": "{{restaurantBTenantId}}" }
+            ],
+            "url": "{{baseUrl}}/api/reservations/{{tenantIsolationReservationId}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('returns 403', () => pm.response.to.have.status(403));",
+                "pm.test('tenant forbidden code', () => pm.expect(pm.response.json().error.code).to.eql('TENANT_FORBIDDEN'));"
+              ]
+            }
+          }]
+        }
+      ]
+    }
+  ]
+}

@@ -8,6 +8,7 @@ import Login from "./pages/auth/Login.jsx";
 import Dashboard from "./pages/dashboard/Dashboard.jsx";
 import Settings from "./pages/dashboard/Settings.jsx";
 import Tables from "./pages/dashboard/Tables.jsx";
+import Reservations from "./pages/dashboard/Reservations.jsx";
 import Loader from "./components/Loader.jsx";
 import ProtectedRoute from "./routes/ProtectedRoute.jsx";
 import PublicRoute from "./routes/PublicRoute.jsx";
@@ -47,6 +48,7 @@ const AppRoutes = () => {
         <Route element={<DashboardLayout />}>
           <Route path={ROUTES.dashboard} element={<Dashboard />} />
           <Route path={ROUTES.tables} element={<Tables />} />
+          <Route path={ROUTES.reservations} element={<Reservations />} />
           <Route path={ROUTES.settings} element={<Settings />} />
         </Route>
       </Route>

@@ -41,7 +41,7 @@ const SlotSelector = ({
     <div className={`space-y-2 ${className}`}>
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
         {slots.map((slot) => {
-          const isAvailable = slot.available;
+          const isAvailable = slot.available ?? slot.is_available;
           const isSelected = selectedSlot === slot.time;
 
           return (

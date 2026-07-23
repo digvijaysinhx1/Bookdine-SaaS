@@ -3,5 +3,6 @@ export const ROUTES = Object.freeze({
   dashboard: "/dashboard",
   settings: "/settings",
   tables: "/tables",
+  reservations: "/reservations",
   root: "/",
 });

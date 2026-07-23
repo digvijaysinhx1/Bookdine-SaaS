@@ -6,7 +6,14 @@ const SLOT_INTERVAL_MINUTES = 30;
 const BOOKING_WINDOW_DAYS = 30;
 const MIN_GUESTS = 1;
 const BOOKDINE_MAX_GUESTS = 15;
-const ACTIVE_RESERVATION_STATUSES = ["PENDING", "CONFIRMED", "pending", "confirmed"];
+const ACTIVE_RESERVATION_STATUSES = [
+  "PENDING",
+  "CONFIRMED",
+  "SEATED",
+  "pending",
+  "confirmed",
+  "seated",
+];
 const MISSING_TABLE_CODES = new Set(["42P01", "PGRST205"]);
 
 const requireTenant = (tenant_id) => {

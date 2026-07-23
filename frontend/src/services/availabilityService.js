@@ -1,19 +1,17 @@
 import { AVAILABILITY_ENDPOINTS } from "../constants/api.js";
-import { API_BASE_URL } from "../constants/api.js";
 import { apiClient } from "../utils/apiClient.js";
 
 const buildUrlWithParams = (endpoint, params) => {
-  const base = API_BASE_URL.replace(/\/$/, "");
-  const path = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
-  const url = new URL(`${base}${path}`);
+  const url = new URLSearchParams();
   
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
-      url.searchParams.append(key, value);
+      url.append(key, value);
     }
   });
   
-  return url.pathname + url.search;
+  const query = url.toString();
+  return query ? `${endpoint}?${query}` : endpoint;
 };
 
 export const getAvailability = async (token, { date, guests }) => {

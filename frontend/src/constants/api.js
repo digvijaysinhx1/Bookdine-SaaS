@@ -22,3 +22,11 @@ export const AVAILABILITY_ENDPOINTS = {
   getAvailability: "/availability",
   getTimeSlots: "/time-slots",
 };
+
+export const RESERVATION_ENDPOINTS = {
+  getAll: "/reservations",
+  getById: (id) => `/reservations/${id}`,
+  create: "/reservations",
+  updateStatus: (id) => `/reservations/${id}/status`,
+  cancel: (id) => `/reservations/${id}/cancel`,
+};
