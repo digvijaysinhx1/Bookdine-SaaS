@@ -31,6 +31,8 @@ const toMinutes = (time) => {
   return hours * 60 + minutes;
 };
 
+const getMaximumSuitableCapacity = (guests) => (guests === 1 ? 4 : guests * 2);
+
 const formatTime = (minutes) => {
   const hours = String(Math.floor(minutes / 60)).padStart(2, "0");
   const mins = String(minutes % 60).padStart(2, "0");
@@ -49,9 +51,11 @@ const parseLocalDate = (date) => {
 };
 
 const dateTimeFromMinutes = (date, minutes) => {
-  const value = parseLocalDate(date);
-  value.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
-  return value;
+  const [year, month, day] = date.split("-").map(Number);
+
+  return new Date(
+    Date.UTC(year, month - 1, day, Math.floor(minutes / 60), minutes % 60, 0, 0)
+  );
 };
 
 const formatLocalDate = (date) => {
@@ -191,6 +195,7 @@ const getTables = async ({ tenant_id, guests }) => {
     .eq("tenant_id", tenant_id)
     .eq("is_active", true)
     .gte("capacity", guests)
+    .lt("capacity", getMaximumSuitableCapacity(guests))
     .order("capacity", { ascending: true })
     .order("id", { ascending: true });
 
@@ -249,7 +254,10 @@ const getUnavailableTableIds = ({ reservations, tables, slotStart, slotEnd }) =>
   for (const reservation of unassignedReservations) {
     const guests = reservation.no_of_guests || MIN_GUESTS;
     const table = tables.find(
-      (candidate) => candidate.capacity >= guests && !unavailableIds.has(candidate.id)
+      (candidate) =>
+        candidate.capacity >= guests &&
+        candidate.capacity < getMaximumSuitableCapacity(guests) &&
+        !unavailableIds.has(candidate.id)
     );
 
     if (table) {
@@ -266,7 +274,7 @@ const getNextAllowedSameDaySlot = (now) => {
     SLOT_INTERVAL_MINUTES;
 };
 
-const buildSlots = ({ date, timing, tables, reservations }) => {
+const buildSlots = ({ date, timing, tables, reservations, source }) => {
   if (timing.is_closed) {
     throw conflict("Restaurant is closed for reservations on this day", "RESTAURANT_CLOSED");
   }
@@ -281,7 +289,8 @@ const buildSlots = ({ date, timing, tables, reservations }) => {
 
   const today = new Date();
   const isToday = date === formatLocalDate(today);
-  const firstSlotMinutes = isToday
+  const usesWidgetBuffer = source !== "dashboard";
+  const firstSlotMinutes = isToday && usesWidgetBuffer
     ? Math.max(openingMinutes, getNextAllowedSameDaySlot(today))
     : openingMinutes;
 
@@ -315,7 +324,7 @@ const buildSlots = ({ date, timing, tables, reservations }) => {
   return slots;
 };
 
-const buildAvailabilityContext = async ({ tenant_id, date, guests }) => {
+const buildAvailabilityContext = async ({ tenant_id, date, guests, source }) => {
   requireTenant(tenant_id);
   validateBookingWindow(date);
 
@@ -337,7 +346,7 @@ const buildAvailabilityContext = async ({ tenant_id, date, guests }) => {
     openingMinutes,
     closingMinutes,
   });
-  const slots = buildSlots({ date, timing, tables, reservations });
+  const slots = buildSlots({ date, timing, tables, reservations, source });
 
   return {
     date,
@@ -351,8 +360,8 @@ const buildAvailabilityContext = async ({ tenant_id, date, guests }) => {
   };
 };
 
-export const getTimeSlots = async ({ tenant_id, date, guests } = {}) => {
-  const context = await buildAvailabilityContext({ tenant_id, date, guests });
+export const getTimeSlots = async ({ tenant_id, date, guests, source } = {}) => {
+  const context = await buildAvailabilityContext({ tenant_id, date, guests, source });
 
   return {
     date: context.date,

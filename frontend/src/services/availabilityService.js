@@ -14,8 +14,8 @@ const buildUrlWithParams = (endpoint, params) => {
   return query ? `${endpoint}?${query}` : endpoint;
 };
 
-export const getAvailability = async (token, { date, guests }) => {
-  const url = buildUrlWithParams(AVAILABILITY_ENDPOINTS.getAvailability, { date, guests });
+export const getAvailability = async (token, { date, guests, source }) => {
+  const url = buildUrlWithParams(AVAILABILITY_ENDPOINTS.getAvailability, { date, guests, source });
   const response = await apiClient(url, {
     method: "GET",
     token,
@@ -24,8 +24,8 @@ export const getAvailability = async (token, { date, guests }) => {
   return response.data;
 };
 
-export const getTimeSlots = async (token, { date, guests }) => {
-  const url = buildUrlWithParams(AVAILABILITY_ENDPOINTS.getTimeSlots, { date, guests });
+export const getTimeSlots = async (token, { date, guests, source }) => {
+  const url = buildUrlWithParams(AVAILABILITY_ENDPOINTS.getTimeSlots, { date, guests, source });
   const response = await apiClient(url, {
     method: "GET",
     token,

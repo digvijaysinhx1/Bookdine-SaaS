@@ -1,11 +1,11 @@
 const ReservationFilters = ({ selectedFilter, onFilterChange }) => {
   const filters = [
     { value: "", label: "All Reservations" },
-    { value: "CONFIRMED", label: "Confirmed" },
-    { value: "SEATED", label: "Seated" },
-    { value: "COMPLETED", label: "Completed" },
-    { value: "CANCELLED", label: "Cancelled" },
-    { value: "NO_SHOW", label: "No Show" },
+    { value: "confirmed", label: "confirmed" },
+    { value: "seated", label: "seated" },
+    { value: "completed", label: "completed" },
+    { value: "cancelled", label: "cancelled" },
+    { value: "no_show", label: "no_show" },
   ];
 
   return (

@@ -33,8 +33,8 @@ const ReservationCard = ({ reservation, onStatusChange, onCancel }) => {
 
   const canChangeStatus = (currentStatus, newStatus) => {
     const validTransitions = {
-      CONFIRMED: ['SEATED', 'NO_SHOW', 'CANCELLED'],
-      SEATED: ['COMPLETED'],
+      confirmed: ['seated', 'no_show', 'cancelled'],
+      seated: ['completed'],
     };
     return validTransitions[currentStatus]?.includes(newStatus) || false;
   };
@@ -51,7 +51,7 @@ const ReservationCard = ({ reservation, onStatusChange, onCancel }) => {
   };
 
   const handleCancel = async () => {
-    if (reservation.status !== 'CONFIRMED') return;
+    if (reservation.status !== 'confirmed') return;
     
     setIsUpdating(true);
     try {
@@ -104,12 +104,12 @@ const ReservationCard = ({ reservation, onStatusChange, onCancel }) => {
         </div>
 
         <div className="flex flex-col gap-2 sm:min-w-35">
-          {reservation.status === 'CONFIRMED' && (
+          {reservation.status === 'confirmed' && (
             <>
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => handleStatusChange('SEATED')}
+                onClick={() => handleStatusChange('seated')}
                 disabled={isUpdating}
                 className="w-full"
               >
@@ -118,7 +118,7 @@ const ReservationCard = ({ reservation, onStatusChange, onCancel }) => {
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => handleStatusChange('NO_SHOW')}
+                onClick={() => handleStatusChange('no_show')}
                 disabled={isUpdating}
                 className="w-full"
               >
@@ -136,11 +136,11 @@ const ReservationCard = ({ reservation, onStatusChange, onCancel }) => {
             </>
           )}
 
-          {reservation.status === 'SEATED' && (
+          {reservation.status === 'seated' && (
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => handleStatusChange('COMPLETED')}
+              onClick={() => handleStatusChange('completed')}
               disabled={isUpdating}
               className="w-full"
             >
@@ -148,19 +148,19 @@ const ReservationCard = ({ reservation, onStatusChange, onCancel }) => {
             </Button>
           )}
 
-          {reservation.status === 'COMPLETED' && (
+          {reservation.status === 'completed' && (
             <div className="text-sm text-text-secondary text-center py-2">
               Reservation completed
             </div>
           )}
 
-          {reservation.status === 'CANCELLED' && (
+          {reservation.status === 'cancelled' && (
             <div className="text-sm text-text-secondary text-center py-2">
               Reservation cancelled
             </div>
           )}
 
-          {reservation.status === 'NO_SHOW' && (
+          {reservation.status === 'no_show' && (
             <div className="text-sm text-text-secondary text-center py-2">
               No show recorded
             </div>

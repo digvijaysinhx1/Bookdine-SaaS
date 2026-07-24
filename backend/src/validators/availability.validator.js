@@ -33,12 +33,16 @@ const parseGuests = (value) => {
   return guests;
 };
 
+const parseSource = (value) =>
+  value === "dashboard" ? "dashboard" : "widget";
+
 export const validateAvailabilityQuery = (req, res, next) => {
   try {
     req.query = {
       ...req.query,
       date: parseDate(req.query?.date),
       guests: parseGuests(req.query?.guests),
+      source: parseSource(req.query?.source),
     };
 
     next();

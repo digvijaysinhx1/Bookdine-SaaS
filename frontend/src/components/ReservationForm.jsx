@@ -106,7 +106,7 @@ const ReservationForm = ({ onSubmit, onCancel, isLoading, token }) => {
     setSlotError("");
     
     try {
-      const availability = await getTimeSlots(token, { date, guests });
+      const availability = await getTimeSlots(token, { date, guests, source: "dashboard" });
       if (requestId !== slotRequestId.current) return;
       
       if (availability && availability.slots && availability.slots.length > 0) {

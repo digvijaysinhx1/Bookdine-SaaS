@@ -6,6 +6,7 @@ export const getAvailability = async (req, res, next) => {
       tenant_id: req.tenant_id,
       date: req.query.date,
       guests: req.query.guests,
+      source: req.query.source,
     });
 
     res.status(200).json({
@@ -23,6 +24,7 @@ export const getTimeSlots = async (req, res, next) => {
       tenant_id: req.tenant_id,
       date: req.query.date,
       guests: req.query.guests,
+      source: req.query.source,
     });
 
     res.status(200).json({

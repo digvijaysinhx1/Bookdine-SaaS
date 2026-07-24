@@ -5,7 +5,6 @@ import { badRequest, conflict, HttpError } from "../utils/httpError.js";
 const RESERVATION_DURATION_MINUTES = 90;
 const CANCELLATION_WINDOW_MINUTES = 60;
 const GRACE_PERIOD_MINUTES = 10;
-const MAX_ACTIVE_RESERVATIONS_PER_PHONE = 3;
 const ACTIVE_STATUSES = ["confirmed", "seated"];
 const TERMINAL_STATUSES = ["completed", "no_show", "cancelled"];
 const RESERVATION_COLUMNS = [
@@ -35,20 +34,22 @@ const requireTenant = (tenant_id) => {
 const notFound = () =>
   new HttpError(404, "Reservation was not found", "RESERVATION_NOT_FOUND");
 
-const parseLocalDate = (date) => {
-  const [year, month, day] = date.split("-").map(Number);
-  return new Date(year, month - 1, day);
-};
+const parseDateParts = (date) => date.split("-").map(Number);
 
 const toMinutes = (time) => {
   const [hours, minutes] = String(time).slice(0, 5).split(":").map(Number);
   return hours * 60 + minutes;
 };
 
+const getMaximumSuitableCapacity = (guests) => (guests === 1 ? 4 : guests * 2);
+
 const dateTimeFromSlot = (date, slot) => {
-  const value = parseLocalDate(date);
-  value.setHours(Math.floor(toMinutes(slot) / 60), toMinutes(slot) % 60, 0, 0);
-  return value;
+  const [year, month, day] = parseDateParts(date);
+  const minutes = toMinutes(slot);
+
+  return new Date(
+    Date.UTC(year, month - 1, day, Math.floor(minutes / 60), minutes % 60, 0, 0)
+  );
 };
 
 const addMinutes = (date, minutes) =>
@@ -75,8 +76,8 @@ const isDuplicateReservationError = (error) =>
   error?.message?.includes("reservations_unique_active_slot") ||
   error?.message?.includes("reservations_no_active_table_overlap");
 
-const assertAvailableSlot = async ({ tenant_id, date, guests, slot }) => {
-  const slots = await availabilityService.getTimeSlots({ tenant_id, date, guests });
+const assertAvailableSlot = async ({ tenant_id, date, guests, slot, source }) => {
+  const slots = await availabilityService.getTimeSlots({ tenant_id, date, guests, source });
   const selectedSlot = slots.slots.find((candidate) => candidate.time === slot);
 
   if (!selectedSlot) {
@@ -88,45 +89,6 @@ const assertAvailableSlot = async ({ tenant_id, date, guests, slot }) => {
   }
 };
 
-const assertActiveReservationLimit = async ({ tenant_id, phone_number, phone }) => {
-  const normalizedPhoneNumber = String(phone_number ?? phone ?? "").trim();
-
-  if (!normalizedPhoneNumber) {
-    throw badRequest("phone_number is required", "VALIDATION_ERROR");
-  }
-
-  let { count, error } = await supabaseAdmin
-    .from("reservations")
-    .select("id", { count: "exact", head: true })
-    .eq("tenant_id", tenant_id)
-    .eq("customer_phone", normalizedPhoneNumber)
-    .in("status", ACTIVE_STATUSES);
-
-  if (error) {
-    const fallback = await supabaseAdmin
-      .from("reservations")
-      .select("id", { count: "exact", head: true })
-      .eq("tenant_id", tenant_id)
-      .eq("customer_phone", normalizedPhoneNumber)
-      .in("status", ACTIVE_STATUSES);
-
-    count = fallback.count;
-    error = fallback.error;
-  }
-
-  if (error) {
-    console.warn("Skipping active reservation limit check:", error.message);
-    return;
-  }
-
-  if ((count || 0) >= MAX_ACTIVE_RESERVATIONS_PER_PHONE) {
-    throw conflict(
-      "Maximum active reservation limit exceeded",
-      "ACTIVE_RESERVATION_LIMIT_EXCEEDED"
-    );
-  }
-};
-
 const getTables = async ({ tenant_id, guests }) => {
   const { data, error } = await supabaseAdmin
     .from("cafe_tables")
@@ -134,6 +96,7 @@ const getTables = async ({ tenant_id, guests }) => {
     .eq("tenant_id", tenant_id)
     .eq("is_active", true)
     .gte("capacity", guests)
+    .lt("capacity", getMaximumSuitableCapacity(guests))
     .order("capacity", { ascending: true })
     .order("id", { ascending: true });
 
@@ -240,17 +203,12 @@ const createBookingReference = () => `BKD${Date.now().toString().slice(-8)}`;
 export const createReservation = async ({ tenant_id, reservation } = {}) => {
   requireTenant(tenant_id);
 
-  await assertActiveReservationLimit({
-    tenant_id,
-    phone_number: reservation.phone_number,
-    phone: reservation.phone,
-  });
-
   await assertAvailableSlot({
     tenant_id,
     date: reservation.date,
     guests: reservation.guests,
     slot: reservation.slot,
+    source: "dashboard",
   });
 
   const reservationStart = dateTimeFromSlot(reservation.date, reservation.slot);

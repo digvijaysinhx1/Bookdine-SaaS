@@ -91,11 +91,11 @@ const Reservations = () => {
   const getFilterLabel = () => {
     const labels = {
       "": "All Reservations",
-      CONFIRMED: "Confirmed",
-      SEATED: "Seated",
-      COMPLETED: "Completed",
-      CANCELLED: "Cancelled",
-      NO_SHOW: "No Show",
+      confirmed: "confirmed",
+      seated: "seated",
+      completed: "completed",
+      cancelled: "cancelled",
+      no_show: "no_show",
     };
     return labels[selectedFilter] || "All Reservations";
   };
