@@ -19,6 +19,7 @@ export const createTable = async (req, res, next) => {
   try {
     const table = await tablesService.createTable({
       tenant_id: req.tenant_id,
+      user_id: req.user?.id,
       table: req.body,
     });
 

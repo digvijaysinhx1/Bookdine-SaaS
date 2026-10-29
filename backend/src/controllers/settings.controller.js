@@ -30,3 +30,15 @@ export const updateSettings = async (req, res, next) => {
     next(err);
   }
 };
+
+export const updateSlug = async (req, res, next) => {
+  try {
+    const result = await settingsService.updateSlug({
+      tenant_id: req.tenant_id,
+      slug: req.body.slug,
+    });
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+};

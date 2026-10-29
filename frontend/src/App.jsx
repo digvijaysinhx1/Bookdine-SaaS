@@ -12,6 +12,8 @@ import Reservations from "./pages/dashboard/Reservations.jsx";
 import Loader from "./components/Loader.jsx";
 import ProtectedRoute from "./routes/ProtectedRoute.jsx";
 import PublicRoute from "./routes/PublicRoute.jsx";
+import BookingWidget from "./pages/public/BookingWidget.jsx";
+import Staff from "./pages/dashboard/Staff.jsx";
 
 const App = () => {
   return (
@@ -36,6 +38,7 @@ const AppRoutes = () => {
 
   return (
     <Routes>
+      <Route path="/book/:slug" element={<BookingWidget />} />
       <Route path={ROUTES.root} element={<Navigate to={defaultRoute} replace />} />
 
       <Route element={<PublicRoute />}>
@@ -49,7 +52,10 @@ const AppRoutes = () => {
           <Route path={ROUTES.dashboard} element={<Dashboard />} />
           <Route path={ROUTES.tables} element={<Tables />} />
           <Route path={ROUTES.reservations} element={<Reservations />} />
-          <Route path={ROUTES.settings} element={<Settings />} />
+          <Route element={<ProtectedRoute allowedRoles={["RESTAURANT_ADMIN"]} />}>
+            <Route path={ROUTES.settings} element={<Settings />} />
+            <Route path={ROUTES.staff} element={<Staff />} />
+          </Route>
         </Route>
       </Route>
 

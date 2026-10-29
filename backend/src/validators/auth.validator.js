@@ -34,3 +34,35 @@ export const validateLoginRequest = (req, res, next) => {
     next(err);
   }
 };
+
+const validateText = (value, field, { max = 120 } = {}) => {
+  if (typeof value !== "string" || !value.trim()) {
+    throw badRequest(`${field} is required`, "VALIDATION_ERROR");
+  }
+
+  const trimmed = value.trim();
+
+  if (trimmed.length > max) {
+    throw badRequest(`${field} must be ${max} characters or fewer`, "VALIDATION_ERROR");
+  }
+
+  return trimmed;
+};
+
+export const validateRegisterRequest = (req, res, next) => {
+  try {
+    req.body = {
+      owner_name: validateText(req.body?.owner_name ?? req.body?.name, "owner_name"),
+      owner_email: validateEmail(req.body?.owner_email ?? req.body?.email),
+      password: validatePassword(req.body?.password),
+      restaurant_name: validateText(
+        req.body?.restaurant_name ?? req.body?.tenant_name,
+        "restaurant_name"
+      ),
+    };
+
+    next();
+  } catch (err) {
+    next(err);
+  }
+};

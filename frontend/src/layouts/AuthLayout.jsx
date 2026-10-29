@@ -2,7 +2,7 @@ import { Outlet } from "react-router-dom";
 
 const AuthLayout = () => {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-surface-muted via-white to-brand-50">
+    <div className="min-h-screen bg-linear-to-br from-surface-muted via-white to-brand-50">
       <div className="mx-auto flex min-h-screen max-w-7xl items-center justify-center px-4 py-10 sm:px-6">
         <div className="w-full max-w-md">
           <div className="mb-8 text-center">

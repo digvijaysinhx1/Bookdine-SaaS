@@ -19,3 +19,12 @@ export const updateSettings = async (token, settingsData) => {
 
   return response.data;
 };
+
+export const updateRestaurantSlug = async (token, slug) => {
+  const response = await apiClient("/settings/slug", {
+    method: "PUT",
+    token,
+    body: { slug },
+  });
+  return response.data;
+};

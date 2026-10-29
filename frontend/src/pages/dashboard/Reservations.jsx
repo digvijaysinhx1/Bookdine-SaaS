@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "../../hooks/useAuth.js";
 import {
   getReservations,
@@ -22,28 +22,37 @@ const Reservations = () => {
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
   const [reservations, setReservations] = useState([]);
-  const [selectedFilter, setSelectedFilter] = useState("");
+  const [filters, setFilters] = useState({ status: "", date: "", source: "", search: "" });
+  const [searchInput, setSearchInput] = useState("");
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  useEffect(() => {
-    fetchReservations();
-  }, [accessToken, selectedFilter]);
-
-  const fetchReservations = async () => {
+  const fetchReservations = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const filters = selectedFilter ? { status: selectedFilter } : {};
-      const data = await getReservations(accessToken, filters);
+      const data = await getReservations(accessToken, { ...filters, page, page_size: 50 });
       setReservations(Array.isArray(data) ? data : []);
+      setHasMore(Array.isArray(data) && data.length === 50);
     } catch (err) {
       setError(err.message || "Failed to load reservations");
       setReservations([]);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [accessToken, filters, page]);
+
+  useEffect(() => { fetchReservations(); }, [fetchReservations]);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setPage(1);
+      setFilters((current) => current.search === searchInput ? current : { ...current, search: searchInput });
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [searchInput]);
 
   const handleCreateReservation = async (reservationData) => {
     setIsSubmitting(true);
@@ -88,16 +97,13 @@ const Reservations = () => {
     }
   };
 
-  const getFilterLabel = () => {
-    const labels = {
-      "": "All Reservations",
-      confirmed: "confirmed",
-      seated: "seated",
-      completed: "completed",
-      cancelled: "cancelled",
-      no_show: "no_show",
-    };
-    return labels[selectedFilter] || "All Reservations";
+  const updateFilter = (key, value) => {
+    setPage(1);
+    if (key === "search") {
+      setSearchInput(value);
+      return;
+    }
+    setFilters((current) => ({ ...current, [key]: value }));
   };
 
   if (isLoading) {
@@ -126,27 +132,18 @@ const Reservations = () => {
         </div>
       )}
 
-      <div className="mb-6">
-        <ReservationFilters
-          selectedFilter={selectedFilter}
-          onFilterChange={setSelectedFilter}
-        />
-      </div>
+      <div className="mb-6"><ReservationFilters filters={{ ...filters, search: searchInput }} onFilterChange={updateFilter} /></div>
 
       {isLoading ? (
         <LoadingReservations />
+      ) : error ? (
+        <div className="rounded-lg border border-border bg-surface p-8 text-center"><p className="mb-4 text-sm text-text-secondary">Reservations could not be loaded.</p><Button variant="secondary" onClick={fetchReservations}>Try again</Button></div>
       ) : reservations.length === 0 ? (
-        <NoReservations filter={getFilterLabel()} />
+        <NoReservations filter={filters.status ? filters.status.toLowerCase().replace("_", " ") : "matching"} />
       ) : (
         <div className="space-y-4">
-          {reservations.map((reservation) => (
-            <ReservationCard
-              key={reservation.id}
-              reservation={reservation}
-              onStatusChange={handleStatusChange}
-              onCancel={handleCancelReservation}
-            />
-          ))}
+          {reservations.map((reservation) => <ReservationCard key={reservation.id} reservation={reservation} onStatusChange={handleStatusChange} onCancel={handleCancelReservation} />)}
+          <div className="flex items-center justify-between pt-2"><span className="text-sm text-text-secondary">Page {page}</span><div className="flex gap-2"><Button variant="secondary" size="sm" disabled={page <= 1 || isLoading} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</Button><Button variant="secondary" size="sm" disabled={!hasMore || isLoading} onClick={() => setPage((current) => current + 1)}>Next</Button></div></div>
         </div>
       )}
 

@@ -30,6 +30,7 @@ const supabaseServiceRoleKey = getFirstEnv([
   "SUPABASE_SERVICE_ROLE_KEY",
   "SUPABASE_SECRET_KEY",
 ]);
+
 const supabaseAnonKey = getFirstEnv(
   ["SUPABASE_ANON_KEY", "SUPABASE_PUBLISHABLE_KEY"],
   { required: false }

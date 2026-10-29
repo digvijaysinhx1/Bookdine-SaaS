@@ -1,0 +1,57 @@
+{
+  "info": {
+    "name": "Bookdine Phase 9 — Dashboard & Staff",
+    "description": "Phase 9 dashboard, reservation listing filters, and owner-only staff management. Set baseUrl, ownerToken, and staffToken before sending protected requests. Dashboard and staff payloads omit tenant identifiers. Staff account creation creates an account with a bcrypt-hashed password; email invitations are not sent.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000/api" },
+    { "key": "ownerToken", "value": "" },
+    { "key": "staffToken", "value": "" },
+    { "key": "reservationId", "value": "1" }
+  ],
+  "item": [
+    {
+      "name": "Modified APIs",
+      "item": [
+        {
+          "name": "Owner login (response no longer includes tenant_id)",
+          "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"owner@example.com\",\n  \"password\": \"replace-with-password\"\n}" }, "url": "{{baseUrl}}/auth/login", "description": "200 returns access_token, token_type, expires_in, and a user object without tenant_id. Failure: 401 for invalid credentials." },
+          "response": [{ "name": "Success", "originalRequest": { "method": "POST", "url": "{{baseUrl}}/auth/login" }, "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\n  \"success\": true,\n  \"data\": {\n    \"access_token\": \"<jwt>\",\n    \"token_type\": \"Bearer\",\n    \"expires_in\": \"15m\",\n    \"user\": { \"id\": 1, \"name\": \"Restaurant Owner\", \"email\": \"owner@example.com\", \"role\": \"RESTAURANT_ADMIN\" }\n  }\n}" }]
+        },
+        {
+          "name": "Dashboard overview",
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{ownerToken}}" }], "url": "{{baseUrl}}/dashboard", "description": "Returns today's totals and reservations plus status counts for the next 30 days. Tenant scope comes from the authenticated account. 401 for missing/invalid auth; 403 for unauthorized restaurant roles." },
+          "response": [{ "name": "Success", "originalRequest": { "method": "GET", "url": "{{baseUrl}}/dashboard" }, "status": "OK", "code": 200, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\n  \"success\": true,\n  \"data\": {\n    \"restaurant_name\": \"Example Bistro\",\n    \"today_total\": 2,\n    \"upcoming_total\": 7,\n    \"status_counts\": { \"pending\": 0, \"confirmed\": 5, \"seated\": 1, \"completed\": 1, \"cancelled\": 0, \"no_show\": 0 },\n    \"today_reservations\": [{ \"id\": 12, \"guest_name\": \"Alex Guest\", \"time\": \"19:00\", \"guests\": 2, \"table_number\": \"T1\", \"status\": \"confirmed\" }]\n  }\n}" }]
+        },
+        {
+          "name": "List reservations (filters + pagination)",
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{ownerToken}}" }], "url": { "raw": "{{baseUrl}}/reservations?date=2026-10-28&status=CONFIRMED&source=online&search=Alex&page=1&page_size=50", "host": ["{{baseUrl}}"], "path": ["reservations"], "query": [{ "key": "date", "value": "2026-10-28" }, { "key": "status", "value": "CONFIRMED" }, { "key": "source", "value": "online" }, { "key": "search", "value": "Alex" }, { "key": "page", "value": "1" }, { "key": "page_size", "value": "50" }] }, "description": "Filters supported: date (YYYY-MM-DD), status, source (online or walk_in), search (guest name, phone, email or numeric booking ID), page and page_size (maximum 100). Invalid filters return 400." },
+          "response": [{ "name": "Invalid filter", "originalRequest": { "method": "GET", "url": "{{baseUrl}}/reservations?source=other" }, "status": "Bad Request", "code": 400, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\n  \"success\": false,\n  \"error\": { \"code\": \"INVALID_SOURCE_FILTER\", \"message\": \"source must be online or walk_in\" }\n}" }]
+        },
+        {
+          "name": "Get restaurant settings (owner only)",
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{ownerToken}}" }], "url": "{{baseUrl}}/settings", "description": "Existing settings endpoint now requires RESTAURANT_ADMIN. Manager and staff roles are forbidden." }
+        },
+        {
+          "name": "Update restaurant settings (owner only)",
+          "request": { "method": "PUT", "header": [{ "key": "Authorization", "value": "Bearer {{ownerToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"opening_time\": \"09:00\",\n  \"closing_time\": \"22:00\",\n  \"minimum_guests\": 1,\n  \"maximum_guests\": 10,\n  \"booking_window_days\": 30,\n  \"cancellation_hours_before\": 1,\n  \"email_confirmation\": true,\n  \"whatsapp_confirmation\": true,\n  \"is_active\": true\n}" }, "url": "{{baseUrl}}/settings", "description": "Requires RESTAURANT_ADMIN. Existing settings validation rules remain in place." }
+        },
+        {
+          "name": "Update public restaurant slug (owner only)",
+          "request": { "method": "PUT", "header": [{ "key": "Authorization", "value": "Bearer {{ownerToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"slug\": \"example-bistro\"\n}" }, "url": "{{baseUrl}}/settings/slug", "description": "Existing slug endpoint now requires RESTAURANT_ADMIN. Body accepts a URL-safe slug." }
+        },
+        {
+          "name": "List staff (owner only)",
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{ownerToken}}" }], "url": "{{baseUrl}}/staff", "description": "Returns safe staff fields for the authenticated owner's restaurant. Staff and manager roles receive 403 ROLE_FORBIDDEN." },
+          "response": [{ "name": "Forbidden for staff", "originalRequest": { "method": "GET", "url": "{{baseUrl}}/staff" }, "status": "Forbidden", "code": 403, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\n  \"success\": false,\n  \"error\": { \"code\": \"ROLE_FORBIDDEN\", \"message\": \"Insufficient role permissions\" }\n}" }]
+        },
+        {
+          "name": "Create staff account (owner only)",
+          "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{ownerToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Taylor Team\",\n  \"email\": \"taylor@example.com\",\n  \"password\": \"replace-with-12-or-more-characters\",\n  \"role\": \"STAFF\"\n}" }, "url": "{{baseUrl}}/staff", "description": "Creates a same-tenant STAFF or MANAGER account. Password is hashed before storage. Owner role assignment, tenant fields, and public staff registration are unsupported. 400 for invalid role/password; 403 for non-owner." },
+          "response": [{ "name": "Success", "originalRequest": { "method": "POST", "url": "{{baseUrl}}/staff" }, "status": "Created", "code": 201, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": "{\n  \"success\": true,\n  \"data\": { \"name\": \"Taylor Team\", \"email\": \"taylor@example.com\", \"role\": \"STAFF\", \"is_active\": true, \"created_at\": \"2026-10-28T12:00:00.000Z\" }\n}" }]
+        }
+      ]
+    }
+  ]
+}

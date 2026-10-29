@@ -13,8 +13,8 @@ const buildUrlWithParams = (endpoint, params) => {
   return query ? `${endpoint}?${query}` : endpoint;
 };
 
-export const getReservations = async (token, { status, date, phone } = {}) => {
-  const url = buildUrlWithParams("/reservations", { status, date, phone });
+export const getReservations = async (token, { status, date, source, search, page, page_size } = {}) => {
+  const url = buildUrlWithParams("/reservations", { status, date, source, search, page, page_size });
   const response = await apiClient(url, {
     method: "GET",
     token,

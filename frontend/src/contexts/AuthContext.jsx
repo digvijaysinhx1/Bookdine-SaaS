@@ -12,6 +12,14 @@ import {
 
 export const AuthContext = createContext(null);
 
+const dashboardUser = (user) => {
+  if (!user) return user;
+  const safeUser = { ...user };
+  delete safeUser.tenant_id;
+  delete safeUser.tenantId;
+  return safeUser;
+};
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [accessToken, setAccessToken] = useState(null);
@@ -45,7 +53,9 @@ export const AuthProvider = ({ children }) => {
       return false;
     }
 
-    setUser(session.user);
+    const safeUser = dashboardUser(session.user);
+    saveAuthSession({ accessToken: session.accessToken, user: safeUser, rememberMe: session.rememberMe });
+    setUser(safeUser);
     setAccessToken(session.accessToken);
     return true;
   }, [clearSession]);
@@ -78,13 +88,14 @@ export const AuthProvider = ({ children }) => {
         throw new Error("Your role is not allowed to access this application.");
       }
 
+      const safeUser = dashboardUser(data.user);
       saveAuthSession({
         accessToken: data.access_token,
-        user: data.user,
+        user: safeUser,
         rememberMe,
       });
 
-      setUser(data.user);
+      setUser(safeUser);
       setAccessToken(data.access_token);
       return data;
     } catch (error) {

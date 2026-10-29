@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "../db/index.js";
 import { badRequest, conflict, HttpError } from "../utils/httpError.js";
+import { refreshExpiredReservations } from "./reservationStatus.service.js";
 
 const RESERVATION_DURATION_MINUTES = 90;
 const SLOT_INTERVAL_MINUTES = 30;
@@ -14,7 +15,6 @@ const ACTIVE_RESERVATION_STATUSES = [
   "confirmed",
   "seated",
 ];
-const MISSING_TABLE_CODES = new Set(["42P01", "PGRST205"]);
 
 const requireTenant = (tenant_id) => {
   if (!tenant_id) {
@@ -54,7 +54,13 @@ const dateTimeFromMinutes = (date, minutes) => {
   const [year, month, day] = date.split("-").map(Number);
 
   return new Date(
-    Date.UTC(year, month - 1, day, Math.floor(minutes / 60), minutes % 60, 0, 0)
+    year,
+    month - 1,
+    day,
+    Math.floor(minutes / 60),
+    minutes % 60,
+    0,
+    0
   );
 };
 
@@ -65,17 +71,11 @@ const formatLocalDate = (date) => {
   return `${year}-${month}-${day}`;
 };
 
-const getDayOfWeek = (date) => parseLocalDate(date).getDay();
-
-const isMissingOptionalTable = (error) =>
-  MISSING_TABLE_CODES.has(error?.code) ||
-  error?.message?.toLowerCase().includes("could not find the table");
-
 const getRestaurantSettings = async (tenant_id) => {
   const { data, error } = await supabaseAdmin
-    .from("restaurant_settings")
-    .select("opening_time, closing_time, minimum_guests, maximum_guests, is_active")
-    .eq("tenant_id", tenant_id)
+    .from("tenants")
+    .select("opening_time, closing_time, max_guest, status")
+    .eq("id", tenant_id)
     .maybeSingle();
 
   if (error) {
@@ -90,65 +90,20 @@ const getRestaurantSettings = async (tenant_id) => {
 };
 
 const getWeeklyTiming = async ({ tenant_id, date, settings }) => {
-  const { data, error } = await supabaseAdmin
-    .from("restaurant_weekly_timings")
-    .select("opening_time, closing_time, is_closed")
-    .eq("tenant_id", tenant_id)
-    .eq("day_of_week", getDayOfWeek(date))
-    .maybeSingle();
-
-  if (error) {
-    if (isMissingOptionalTable(error)) {
-      return {
-        opening_time: settings.opening_time,
-        closing_time: settings.closing_time,
-        is_closed: !settings.is_active,
-        source: "restaurant_settings",
-      };
-    }
-
-    throw new Error(error.message);
-  }
-
-  if (!data) {
-    return {
-      opening_time: settings.opening_time,
-      closing_time: settings.closing_time,
-      is_closed: !settings.is_active,
-      source: "restaurant_settings",
-    };
-  }
-
   return {
-    opening_time: data.opening_time,
-    closing_time: data.closing_time,
-    is_closed: Boolean(data.is_closed),
-    source: "weekly_timings",
+    opening_time: settings.opening_time,
+    closing_time: settings.closing_time,
+    is_closed: settings.status !== "active",
+    source: "tenants",
   };
 };
 
 const isReservationClosedDate = async ({ tenant_id, date }) => {
-  const { data, error } = await supabaseAdmin
-    .from("restaurant_closed_dates")
-    .select("id")
-    .eq("tenant_id", tenant_id)
-    .eq("closed_date", date)
-    .eq("is_active", true)
-    .limit(1);
-
-  if (error) {
-    if (isMissingOptionalTable(error)) {
-      return false;
-    }
-
-    throw new Error(error.message);
-  }
-
-  return Boolean(data?.length);
+  return false;
 };
 
 const validateGuests = ({ guests, settings }) => {
-  const configuredMaximum = settings.maximum_guests || BOOKDINE_MAX_GUESTS;
+  const configuredMaximum = settings.max_guest || BOOKDINE_MAX_GUESTS;
   const maximumGuests = Math.min(configuredMaximum, BOOKDINE_MAX_GUESTS);
 
   if (guests < MIN_GUESTS) {
@@ -190,10 +145,10 @@ const validateBookingWindow = (date) => {
 
 const getTables = async ({ tenant_id, guests }) => {
   const { data, error } = await supabaseAdmin
-    .from("cafe_tables")
+    .from("tenant_tables")
     .select("id, capacity")
     .eq("tenant_id", tenant_id)
-    .eq("is_active", true)
+    .eq("status", "available")
     .gte("capacity", guests)
     .lt("capacity", getMaximumSuitableCapacity(guests))
     .order("capacity", { ascending: true })
@@ -211,22 +166,27 @@ const getTables = async ({ tenant_id, guests }) => {
 };
 
 const getReservations = async ({ tenant_id, date, openingMinutes, closingMinutes }) => {
-  const rangeStart = dateTimeFromMinutes(date, openingMinutes);
-  const rangeEnd = dateTimeFromMinutes(date, closingMinutes);
-
   const { data, error } = await supabaseAdmin
     .from("reservations")
-    .select("id, table_id, no_of_guests, reservation_start, reservation_end, status")
-    .eq("tenant_id", tenant_id)
-    .lt("reservation_start", rangeEnd.toISOString())
-    .gt("reservation_end", rangeStart.toISOString())
+    .select("id, table_id, guests, reservation_date, start_time, end_time, status, tenant_tables!inner(tenant_id)")
+    .eq("tenant_tables.tenant_id", tenant_id)
+    .eq("reservation_date", date)
+    .lt("start_time", formatTime(closingMinutes))
+    .gt("end_time", formatTime(openingMinutes))
     .in("status", ACTIVE_RESERVATION_STATUSES);
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return data || [];
+  return (data || []).map((reservation) => ({
+    id: reservation.id,
+    table_id: reservation.table_id,
+    no_of_guests: reservation.guests,
+    reservation_start: dateTimeFromMinutes(date, toMinutes(reservation.start_time)).toISOString(),
+    reservation_end: dateTimeFromMinutes(date, toMinutes(reservation.end_time)).toISOString(),
+    status: reservation.status,
+  }));
 };
 
 const overlapsSlot = (reservation, slotStart, slotEnd) => {
@@ -270,8 +230,11 @@ const getUnavailableTableIds = ({ reservations, tables, slotStart, slotEnd }) =>
 
 const getNextAllowedSameDaySlot = (now) => {
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
-  return Math.ceil(currentMinutes / SLOT_INTERVAL_MINUTES) * SLOT_INTERVAL_MINUTES +
-    SLOT_INTERVAL_MINUTES;
+  return Math.ceil(currentMinutes / SLOT_INTERVAL_MINUTES) * SLOT_INTERVAL_MINUTES;
+};
+
+const getNextAllowedWidgetSlot = (now) => {
+  return getNextAllowedSameDaySlot(now) + SLOT_INTERVAL_MINUTES;
 };
 
 const buildSlots = ({ date, timing, tables, reservations, source }) => {
@@ -291,8 +254,10 @@ const buildSlots = ({ date, timing, tables, reservations, source }) => {
   const isToday = date === formatLocalDate(today);
   const usesWidgetBuffer = source !== "dashboard";
   const firstSlotMinutes = isToday && usesWidgetBuffer
-    ? Math.max(openingMinutes, getNextAllowedSameDaySlot(today))
-    : openingMinutes;
+    ? Math.max(openingMinutes, getNextAllowedWidgetSlot(today))
+    : isToday
+      ? Math.max(openingMinutes, getNextAllowedSameDaySlot(today))
+      : openingMinutes;
 
   const slots = [];
 
@@ -340,6 +305,7 @@ const buildAvailabilityContext = async ({ tenant_id, date, guests, source }) => 
   const openingMinutes = toMinutes(timing.opening_time);
   const closingMinutes = toMinutes(timing.closing_time);
   const tables = await getTables({ tenant_id, guests });
+  await refreshExpiredReservations({ tenant_id, date });
   const reservations = await getReservations({
     tenant_id,
     date,

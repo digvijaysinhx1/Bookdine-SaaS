@@ -5,6 +5,7 @@ const TABLE_FIELDS = Object.freeze([
   "capacity",
   "location",
   "is_active",
+  "status",
 ]);
 
 const normalizeString = (value, fieldName, code) => {
@@ -29,6 +30,17 @@ const parseBoolean = (value, fieldName) => {
   }
 
   return value;
+};
+
+const parseStatus = (value) => {
+  const status = normalizeString(value, "status", "INVALID_TABLE_STATUS");
+  const normalized = status.toLowerCase();
+
+  if (!["active", "inactive", "available", "occupied", "reserved"].includes(normalized)) {
+    throw badRequest("status must be Active or Inactive", "INVALID_TABLE_STATUS");
+  }
+
+  return status;
 };
 
 const hasOwn = (body, field) =>
@@ -61,6 +73,7 @@ export const validateCreateTablePayload = (body) => {
     is_active: hasOwn(body, "is_active")
       ? parseBoolean(body.is_active, "is_active")
       : true,
+    ...(hasOwn(body, "status") ? { status: parseStatus(body.status) } : {}),
   };
 };
 
@@ -98,6 +111,10 @@ export const validateUpdateTablePayload = (body) => {
 
   if (hasOwn(body, "is_active")) {
     table.is_active = parseBoolean(body.is_active, "is_active");
+  }
+
+  if (hasOwn(body, "status")) {
+    table.status = parseStatus(body.status);
   }
 
   return table;

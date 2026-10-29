@@ -4,10 +4,14 @@ import ReservationStatusBadge from "./ReservationStatusBadge.jsx";
 
 const ReservationCard = ({ reservation, onStatusChange, onCancel }) => {
   const [isUpdating, setIsUpdating] = useState(false);
+  const status = String(reservation.status || "").toLowerCase();
 
   const formatTime = (timeString) => {
     try {
-      const [hours, minutes] = timeString.split(':');
+      const time = String(timeString || "").includes("T")
+        ? String(timeString).slice(11, 16)
+        : String(timeString || "").slice(0, 5);
+      const [hours, minutes] = time.split(':');
       const hour = parseInt(hours, 10);
       const ampm = hour >= 12 ? 'PM' : 'AM';
       const displayHour = hour % 12 || 12;
@@ -36,7 +40,7 @@ const ReservationCard = ({ reservation, onStatusChange, onCancel }) => {
       confirmed: ['seated', 'no_show', 'cancelled'],
       seated: ['completed'],
     };
-    return validTransitions[currentStatus]?.includes(newStatus) || false;
+    return validTransitions[String(currentStatus || "").toLowerCase()]?.includes(newStatus) || false;
   };
 
   const handleStatusChange = async (newStatus) => {
@@ -51,7 +55,7 @@ const ReservationCard = ({ reservation, onStatusChange, onCancel }) => {
   };
 
   const handleCancel = async () => {
-    if (reservation.status !== 'confirmed') return;
+    if (status !== 'confirmed') return;
     
     setIsUpdating(true);
     try {
@@ -82,6 +86,10 @@ const ReservationCard = ({ reservation, onStatusChange, onCancel }) => {
               <span className="ml-1 text-text-primary">{reservation.guests}</span>
             </div>
             <div>
+              <span className="text-text-secondary">Table:</span>
+              <span className="ml-1 text-text-primary">{reservation.table_number || "Unassigned"}</span>
+            </div>
+            <div>
               <span className="text-text-secondary">Date:</span>
               <span className="ml-1 text-text-primary">{formatDate(reservation.date)}</span>
             </div>
@@ -91,7 +99,7 @@ const ReservationCard = ({ reservation, onStatusChange, onCancel }) => {
             </div>
             <div>
               <span className="text-text-secondary">Source:</span>
-              <span className="ml-1 text-text-primary">{reservation.source}</span>
+              <span className="ml-1 text-text-primary">{{ online: "Online", walk_in: "Walk in" }[reservation.source] || reservation.source}</span>
             </div>
           </div>
 
@@ -104,7 +112,7 @@ const ReservationCard = ({ reservation, onStatusChange, onCancel }) => {
         </div>
 
         <div className="flex flex-col gap-2 sm:min-w-35">
-          {reservation.status === 'confirmed' && (
+          {status === 'confirmed' && (
             <>
               <Button
                 variant="secondary"
@@ -136,7 +144,7 @@ const ReservationCard = ({ reservation, onStatusChange, onCancel }) => {
             </>
           )}
 
-          {reservation.status === 'seated' && (
+          {status === 'seated' && (
             <Button
               variant="secondary"
               size="sm"
@@ -148,19 +156,19 @@ const ReservationCard = ({ reservation, onStatusChange, onCancel }) => {
             </Button>
           )}
 
-          {reservation.status === 'completed' && (
+          {status === 'completed' && (
             <div className="text-sm text-text-secondary text-center py-2">
               Reservation completed
             </div>
           )}
 
-          {reservation.status === 'cancelled' && (
+          {status === 'cancelled' && (
             <div className="text-sm text-text-secondary text-center py-2">
               Reservation cancelled
             </div>
           )}
 
-          {reservation.status === 'no_show' && (
+          {status === 'no_show' && (
             <div className="text-sm text-text-secondary text-center py-2">
               No show recorded
             </div>

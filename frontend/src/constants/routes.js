@@ -4,5 +4,6 @@ export const ROUTES = Object.freeze({
   settings: "/settings",
   tables: "/tables",
   reservations: "/reservations",
+  staff: "/staff",
   root: "/",
 });

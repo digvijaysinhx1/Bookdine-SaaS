@@ -5,16 +5,39 @@ const TABLE_COLUMNS = [
   "id",
   "table_number",
   "capacity",
-  "location",
-  "is_active",
+  "status",
 ].join(", ");
+
+const DB_TABLE = "tenant_tables";
+const DEFAULT_LOCATION = "Indoor";
+
+const toDbStatus = (table = {}) => {
+  if (typeof table.is_active === "boolean") {
+    return table.is_active ? "available" : "inactive";
+  }
+
+  const status = String(table.status || "").toLowerCase();
+
+  if (status === "inactive") {
+    return "inactive";
+  }
+
+  if (["available", "occupied", "reserved"].includes(status)) {
+    return status;
+  }
+
+  return "available";
+};
+
+const toApiStatus = (status) => (status === "inactive" ? "Inactive" : "Active");
 
 const normalizeTable = (table) => ({
   id: table.id,
   table_number: table.table_number,
   capacity: table.capacity,
-  location: table.location,
-  is_active: table.is_active,
+  location: DEFAULT_LOCATION,
+  is_active: table.status !== "inactive",
+  status: toApiStatus(table.status),
 });
 
 const requireTenant = (tenant_id) => {
@@ -30,9 +53,20 @@ const requireTenant = (tenant_id) => {
 const notFound = () =>
   new HttpError(404, "Table was not found", "TABLE_NOT_FOUND");
 
+const requireUser = (user_id) => {
+  if (!user_id) {
+    throw new HttpError(
+      401,
+      "Authenticated user is missing user context",
+      "USER_REQUIRED"
+    );
+  }
+};
+
 const isDuplicateTableNumberError = (error) =>
   error?.code === "23505" ||
-  error?.message?.toLowerCase().includes("cafe_tables_unique_table_number");
+  error?.message?.toLowerCase().includes("uq_tenant_table_number") ||
+  error?.message?.toLowerCase().includes("duplicate key");
 
 const throwIfDuplicateTableNumber = async ({
   tenant_id,
@@ -44,7 +78,7 @@ const throwIfDuplicateTableNumber = async ({
   }
 
   let query = supabaseAdmin
-    .from("cafe_tables")
+    .from(DB_TABLE)
     .select("id")
     .eq("tenant_id", tenant_id)
     .eq("table_number", table_number)
@@ -68,11 +102,30 @@ const throwIfDuplicateTableNumber = async ({
   }
 };
 
+const getTableById = async ({ id, tenant_id }) => {
+  const { data, error } = await supabaseAdmin
+    .from(DB_TABLE)
+    .select(TABLE_COLUMNS)
+    .eq("id", id)
+    .eq("tenant_id", tenant_id)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data) {
+    throw notFound();
+  }
+
+  return data;
+};
+
 export const getTables = async ({ tenant_id } = {}) => {
   requireTenant(tenant_id);
 
   const { data, error } = await supabaseAdmin
-    .from("cafe_tables")
+    .from(DB_TABLE)
     .select(TABLE_COLUMNS)
     .eq("tenant_id", tenant_id)
     .order("table_number", { ascending: true });
@@ -84,8 +137,9 @@ export const getTables = async ({ tenant_id } = {}) => {
   return data.map(normalizeTable);
 };
 
-export const createTable = async ({ tenant_id, table } = {}) => {
+export const createTable = async ({ tenant_id, user_id, table } = {}) => {
   requireTenant(tenant_id);
+  requireUser(user_id);
 
   await throwIfDuplicateTableNumber({
     tenant_id,
@@ -93,13 +147,13 @@ export const createTable = async ({ tenant_id, table } = {}) => {
   });
 
   const { data, error } = await supabaseAdmin
-    .from("cafe_tables")
+    .from(DB_TABLE)
     .insert({
       tenant_id,
       table_number: table.table_number,
       capacity: table.capacity,
-      location: table.location,
-      is_active: table.is_active,
+      status: toDbStatus(table),
+      created_by: user_id,
     })
     .select(TABLE_COLUMNS)
     .single();
@@ -129,9 +183,24 @@ export const updateTable = async ({ id, tenant_id, table } = {}) => {
     });
   }
 
+  const updatePayload = {
+    ...(table.table_number ? { table_number: table.table_number } : {}),
+    ...(table.capacity ? { capacity: table.capacity } : {}),
+    ...(
+      Object.prototype.hasOwnProperty.call(table, "status") ||
+      Object.prototype.hasOwnProperty.call(table, "is_active")
+        ? { status: toDbStatus(table) }
+        : {}
+    ),
+  };
+
+  if (!Object.keys(updatePayload).length) {
+    return normalizeTable(await getTableById({ id, tenant_id }));
+  }
+
   const { data, error } = await supabaseAdmin
-    .from("cafe_tables")
-    .update(table)
+    .from(DB_TABLE)
+    .update(updatePayload)
     .eq("id", id)
     .eq("tenant_id", tenant_id)
     .select(TABLE_COLUMNS)
@@ -159,7 +228,7 @@ export const deleteTable = async ({ id, tenant_id } = {}) => {
   requireTenant(tenant_id);
 
   const { data, error } = await supabaseAdmin
-    .from("cafe_tables")
+    .from(DB_TABLE)
     .delete()
     .eq("id", id)
     .eq("tenant_id", tenant_id)

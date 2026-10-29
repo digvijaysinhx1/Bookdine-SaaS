@@ -1,4 +1,5 @@
 import { badRequest } from "../utils/httpError.js";
+import { normalizeRestaurantSlug } from "../utils/slug.js";
 
 const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/;
 const SETTINGS_FIELDS = Object.freeze([
@@ -130,6 +131,19 @@ export const validateSettingsPayload = (body) => {
 export const validateUpdateSettingsRequest = (req, res, next) => {
   try {
     req.body = validateSettingsPayload(req.body);
+    next();
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const validateSlugUpdate = (req, res, next) => {
+  try {
+    const slug = normalizeRestaurantSlug(req.body?.slug);
+    if (!slug) {
+      throw badRequest("slug must contain only URL-safe letters, numbers, and hyphens; spaces are normalized to hyphens", "INVALID_RESTAURANT_SLUG");
+    }
+    req.body = { slug };
     next();
   } catch (err) {
     next(err);

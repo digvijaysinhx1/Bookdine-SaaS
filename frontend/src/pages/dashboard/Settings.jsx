@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../../hooks/useAuth.js";
-import { getSettings, updateSettings } from "../../services/settingService.js";
+import { getSettings, updateSettings, updateRestaurantSlug } from "../../services/settingService.js";
 import Loader from "../../components/Loader.jsx";
 import ErrorMessage from "../../components/ErrorMessage.jsx";
 import Button from "../../components/Button.jsx";
 import Input from "../../components/Input.jsx";
 import TimePicker from "../../components/TimePicker.jsx";
 import ToggleSwitch from "../../components/ToggleSwitch.jsx";
+import { copyText } from "../../utils/copyText.js";
 
 const Settings = () => {
   const { accessToken } = useAuth();
@@ -26,6 +27,16 @@ const Settings = () => {
     is_active: true,
   });
   const [validationErrors, setValidationErrors] = useState({});
+  const [slugDraft, setSlugDraft] = useState("");
+  const [slugSubmitting, setSlugSubmitting] = useState(false);
+  const [slugFeedback, setSlugFeedback] = useState("");
+  const [slugFeedbackIsError, setSlugFeedbackIsError] = useState(false);
+  const publicBookingUrl = settings.public_booking_url || (
+    settings.slug && import.meta.env.DEV ? `${window.location.origin}/book/${settings.slug}` : ""
+  );
+  const embedSnippet = publicBookingUrl
+    ? `<iframe src="${publicBookingUrl}" title="Book a table" width="100%" height="720" style="border:0;max-width:100%;" loading="lazy"></iframe>`
+    : "";
 
   useEffect(() => {
     fetchSettings();
@@ -38,6 +49,7 @@ const Settings = () => {
     try {
       const data = await getSettings(accessToken);
       setSettings(data);
+      setSlugDraft(data.slug || "");
     } catch (err) {
       setError(err.message || "Failed to load settings");
     } finally {
@@ -111,6 +123,49 @@ const Settings = () => {
     setValidationErrors((prev) => ({ ...prev, [field]: null, notifications: null }));
   };
 
+  const handleSlugSubmit = async (event) => {
+    event.preventDefault();
+    setSlugFeedback("");
+    setSlugSubmitting(true);
+    const previousSlug = settings.slug;
+    try {
+      const saved = await updateRestaurantSlug(accessToken, slugDraft);
+      setSettings((current) => ({ ...current, slug: saved.slug, public_booking_url: saved.public_booking_url }));
+      setSlugDraft(saved.slug);
+      setSlugFeedback(previousSlug && previousSlug !== saved.slug
+        ? "Slug saved. The previous booking link will no longer resolve."
+        : "Slug saved.");
+      setSlugFeedbackIsError(false);
+    } catch (err) {
+      setSlugFeedback(err.message || "Could not save the restaurant slug.");
+      setSlugFeedbackIsError(true);
+    } finally {
+      setSlugSubmitting(false);
+    }
+  };
+
+  const handleCopyBookingUrl = async () => {
+    try {
+      await copyText(publicBookingUrl);
+      setSlugFeedback("Booking URL copied.");
+      setSlugFeedbackIsError(false);
+    } catch (err) {
+      setSlugFeedback(err.message || "Could not copy the booking URL.");
+      setSlugFeedbackIsError(true);
+    }
+  };
+
+  const handleCopyEmbed = async () => {
+    try {
+      await copyText(embedSnippet);
+      setSlugFeedback("Embed snippet copied.");
+      setSlugFeedbackIsError(false);
+    } catch (err) {
+      setSlugFeedback(err.message || "Could not copy the embed snippet.");
+      setSlugFeedbackIsError(true);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex min-h-100 items-center justify-center">
@@ -135,6 +190,50 @@ const Settings = () => {
           {successMessage}
         </div>
       )}
+
+      <section className="mb-6 rounded-lg border border-border bg-surface p-6">
+        <h2 className="text-lg font-medium text-text-primary">Customer Booking Slug</h2>
+        <p className="mt-1 text-sm text-text-secondary">Only the slug is saved. Changing it makes the previous booking link stop resolving.</p>
+        <form onSubmit={handleSlugSubmit} className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+          <Input
+            label="Restaurant slug"
+            value={slugDraft}
+            onChange={(event) => setSlugDraft(event.target.value)}
+            maxLength={100}
+            placeholder="roasted-beans-cafe"
+            autoCapitalize="none"
+            spellCheck={false}
+            hint="Lowercase letters, numbers, and hyphens. Spaces and uppercase letters are normalized when saved."
+            className="flex-1"
+          />
+          <Button type="submit" isLoading={slugSubmitting} disabled={slugSubmitting || !slugDraft.trim()}>
+            Save slug
+          </Button>
+        </form>
+        {slugFeedback && <p role="status" className={`mt-3 text-sm ${slugFeedbackIsError ? "text-danger" : "text-green-700"}`}>{slugFeedback}</p>}
+        {settings.slug && (
+          <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-border pt-4">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-text-secondary">Saved slug</p>
+              <p className="font-medium">{settings.slug}</p>
+              {publicBookingUrl ? (
+                <a className="break-all text-sm text-brand-700 underline" href={publicBookingUrl} target="_blank" rel="noreferrer">{publicBookingUrl}</a>
+              ) : (
+                <p className="mt-1 text-sm text-amber-700">Set PUBLIC_APP_URL in the backend environment to publish an absolute booking link. For local development, the current frontend origin is used.</p>
+              )}
+            </div>
+            <Button type="button" variant="secondary" onClick={handleCopyBookingUrl} disabled={!publicBookingUrl}>Copy booking URL</Button>
+          </div>
+        )}
+        {embedSnippet && (
+          <div className="mt-4 border-t border-border pt-4">
+            <label className="block text-xs font-medium text-text-secondary" htmlFor="booking-embed">Website iframe embed</label>
+            <textarea id="booking-embed" readOnly value={embedSnippet} rows={3} className="mt-2 w-full rounded-md border border-border bg-slate-50 p-3 font-mono text-xs" />
+            <Button type="button" variant="secondary" className="mt-2" onClick={handleCopyEmbed}>Copy embed snippet</Button>
+            <p className="mt-2 text-xs text-text-secondary">The site hosting this app must permit framing from the cafe website in its Content-Security-Policy frame-ancestors setting.</p>
+          </div>
+        )}
+      </section>
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="rounded-lg border border-border bg-surface p-6">

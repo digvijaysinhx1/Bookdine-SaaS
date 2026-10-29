@@ -4,6 +4,7 @@ export const createReservation = async (req, res, next) => {
   try {
     const result = await reservationService.createReservation({
       tenant_id: req.tenant_id,
+      user_id: req.user?.id,
       reservation: req.body,
     });
 

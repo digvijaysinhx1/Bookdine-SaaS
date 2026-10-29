@@ -11,7 +11,7 @@ const navLinkClasses = ({ isActive }) =>
   }`;
 
 const Sidebar = ({ isOpen, onClose }) => {
-  const { logout, isSubmitting } = useAuth();
+  const { logout, isSubmitting, user } = useAuth();
 
   const handleLogout = async () => {
     await logout();
@@ -30,7 +30,7 @@ const Sidebar = ({ isOpen, onClose }) => {
       ) : null}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-border bg-surface transition-transform duration-200 lg:static lg:translate-x-0 ${
+        className={`sticky inset-y-0 left-0 z-50 flex w-72 h-screen flex-col border-r border-border bg-surface transition-transform duration-200 lg:static lg:translate-x-0 ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -39,7 +39,7 @@ const Sidebar = ({ isOpen, onClose }) => {
           <p className="text-xs text-text-secondary">Restaurant Dashboard</p>
         </div>
 
-        <nav className="flex-1 space-y-1 px-4 py-4" aria-label="Main navigation">
+        <nav className="flex-1 space-y-1 px-4 py-4 " aria-label="Main navigation">
           <NavLink to={ROUTES.dashboard} className={navLinkClasses} onClick={onClose}>
             <DashboardIcon />
             Dashboard
@@ -52,10 +52,10 @@ const Sidebar = ({ isOpen, onClose }) => {
             <ReservationsIcon />
             Reservations
           </NavLink>
-          <NavLink to={ROUTES.settings} className={navLinkClasses} onClick={onClose}>
-            <SettingsIcon />
-            Restaurant Settings
-          </NavLink>
+          {user?.role === "RESTAURANT_ADMIN" && <>
+            <NavLink to={ROUTES.settings} className={navLinkClasses} onClick={onClose}><SettingsIcon />Restaurant Settings</NavLink>
+            <NavLink to={ROUTES.staff} className={navLinkClasses} onClick={onClose}><StaffIcon />Staff Management</NavLink>
+          </>}
         </nav>
 
         <div className="border-t border-border p-4">
@@ -162,6 +162,12 @@ const LogoutIcon = () => (
       strokeWidth={1.75}
       d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v1"
     />
+  </svg>
+);
+
+const StaffIcon = () => (
+  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M16 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2m16 0v-2a4 4 0 00-3-3.87M14 3.13a4 4 0 010 7.75M14 7a4 4 0 11-8 0 4 4 0 018 0z" />
   </svg>
 );
 

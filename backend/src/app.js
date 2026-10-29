@@ -4,11 +4,14 @@ import availabilityRoutes from "./routes/availability.routes.js";
 import reservationRoutes from "./routes/reservation.routes.js";
 import settingsRoutes from "./routes/settings.routes.js";
 import tableRoutes from "./routes/tables.routes.js";
+import widgetRoutes from "./routes/widget.routes.js";
+import dashboardRoutes from "./routes/dashboard.routes.js";
+import staffRoutes from "./routes/staff.routes.js";
 import authMiddleware from "./middlewares/auth.middleware.js";
 import roleMiddleware from "./middlewares/role.middleware.js";
 import tenantMiddleware from "./middlewares/tenant.middleware.js";
 import errorMiddleware from "./middlewares/error.middleware.js";
-import { RESTAURANT_ROLES } from "./config/roles.js";
+import { RESTAURANT_ROLES, ROLES } from "./config/roles.js";
 import { HttpError } from "./utils/httpError.js";
 
 const app = express();
@@ -32,6 +35,7 @@ app.use((req, res, next) => {
 app.use(express.json());
 
 app.use("/api/auth", authRoutes);
+app.use("/api/public", widgetRoutes);
 
 app.use(
   "/api",
@@ -39,6 +43,14 @@ app.use(
   roleMiddleware(RESTAURANT_ROLES),
   tenantMiddleware,
   availabilityRoutes
+);
+
+app.use(
+  "/api/dashboard",
+  authMiddleware,
+  roleMiddleware(RESTAURANT_ROLES),
+  tenantMiddleware,
+  dashboardRoutes
 );
 
 app.use(
@@ -52,9 +64,17 @@ app.use(
 app.use(
   "/api/settings",
   authMiddleware,
-  roleMiddleware(RESTAURANT_ROLES),
+  roleMiddleware([ROLES.RESTAURANT_ADMIN]),
   tenantMiddleware,
   settingsRoutes
+);
+
+app.use(
+  "/api/staff",
+  authMiddleware,
+  roleMiddleware([ROLES.RESTAURANT_ADMIN]),
+  tenantMiddleware,
+  staffRoutes
 );
 
 app.use(

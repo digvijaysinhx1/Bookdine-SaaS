@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import { supabaseAdmin } from "../db/index.js";
-import { isRestaurantRole } from "../config/roles.js";
+import { isRestaurantRole, normalizeRole } from "../config/roles.js";
 import { forbidden, unauthorized } from "../utils/httpError.js";
 
 export default async (req, res, next) => {
@@ -26,7 +26,7 @@ export default async (req, res, next) => {
       throw unauthorized("Invalid token type", "INVALID_TOKEN_TYPE");
     }
 
-    if (!decoded.sub || !decoded.tenant_id || !decoded.role) {
+    if (!decoded.sub || !decoded.role) {
       throw unauthorized("Invalid token claims", "INVALID_TOKEN_CLAIMS");
     }
 
@@ -55,10 +55,10 @@ export default async (req, res, next) => {
       throw forbidden("Account is inactive", "ACCOUNT_INACTIVE");
     }
 
-    if (
-      String(user.tenant_id) !== String(decoded.tenant_id) ||
-      user.role !== decoded.role
-    ) {
+    const userRole = normalizeRole(user.role);
+    const tokenRole = normalizeRole(decoded.role);
+
+    if (userRole !== tokenRole || (decoded.tenant_id && String(user.tenant_id) !== String(decoded.tenant_id))) {
       throw unauthorized("Token claims are no longer valid", "STALE_TOKEN");
     }
 
@@ -69,7 +69,7 @@ export default async (req, res, next) => {
     req.user = {
       id: user.id,
       tenant_id: user.tenant_id,
-      role: user.role,
+      role: userRole,
       email: user.email,
     };
 

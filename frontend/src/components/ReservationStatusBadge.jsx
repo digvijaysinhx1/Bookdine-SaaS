@@ -1,5 +1,10 @@
 const ReservationStatusBadge = ({ status }) => {
   const statusConfig = {
+    PENDING: {
+      bgColor: "bg-amber-100",
+      textColor: "text-amber-700",
+      label: "Pending",
+    },
     CONFIRMED: {
       bgColor: "bg-blue-100",
       textColor: "text-blue-700",
@@ -27,7 +32,8 @@ const ReservationStatusBadge = ({ status }) => {
     },
   };
 
-  const config = statusConfig[status] || statusConfig.CONFIRMED;
+  const normalizedStatus = String(status || "").toUpperCase();
+  const config = statusConfig[normalizedStatus] || statusConfig.CONFIRMED;
 
   return (
     <span

@@ -1,0 +1,72 @@
+{
+  "info": {
+    "name": "Bookdine Phase 8 - Customer Booking Widget",
+    "description": "Public widget APIs and the affected authenticated slug update API. Twilio Verify and Upstash Redis credentials are configured only in the backend environment. In explicit local development mode, the OTP response includes a development_otp field.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000/api" },
+    { "key": "slug", "value": "roasted-beans-cafe" },
+    { "key": "accessToken", "value": "" },
+    { "key": "requestId", "value": "" },
+    { "key": "otp", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Get public restaurant details",
+      "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/public/restaurants/{{slug}}" },
+      "response": [{ "name": "Success", "status": "OK", "code": 200, "body": "{\n  \"success\": true,\n  \"data\": { \"name\": \"Roasted Beans Cafe\", \"opening_time\": \"09:00:00\", \"closing_time\": \"22:00:00\", \"minimum_guests\": 1, \"maximum_guests\": 15, \"booking_window_days\": 30, \"reservation_duration_minutes\": 90, \"cancellation_hours_before\": 1 }\n}" }]
+    },
+    {
+      "name": "Get available widget slots",
+      "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/public/restaurants/{{slug}}/slots?date=2026-10-27&guests=2" },
+      "response": []
+    },
+    {
+      "name": "Request phone SMS OTP",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"guest@example.com\",\n  \"phone_number\": \"+14155552671\"\n}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/public/restaurants/{{slug}}/otp"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["if (pm.response.code === 202) {", "  const data = pm.response.json().data;", "  pm.collectionVariables.set('requestId', data.request_id);", "  if (data.development_otp) pm.collectionVariables.set('otp', data.development_otp);", "}"] } }],
+      "response": [
+        { "name": "Accepted - production", "status": "Accepted", "code": 202, "body": "{\n  \"success\": true,\n  \"data\": { \"request_id\": \"e832071b-d4a4-4fc5-a3fd-31e67a60cb92\", \"message\": \"Verification code sent to your phone\" }\n}" },
+        { "name": "Accepted - local development only", "status": "Accepted", "code": 202, "body": "{\n  \"success\": true,\n  \"data\": { \"request_id\": \"e832071b-d4a4-4fc5-a3fd-31e67a60cb92\", \"message\": \"Verification code sent to your phone\", \"development_otp\": \"123456\" }\n}" },
+        { "name": "Provider unavailable", "status": "Service Unavailable", "code": 503, "body": "{\n  \"success\": false,\n  \"error\": { \"code\": \"OTP_PROVIDER_NOT_CONFIGURED\", \"message\": \"Phone verification is not configured. Configure Twilio Verify and Upstash Redis.\" }\n}" }
+      ]
+    },
+    {
+      "name": "Verify phone OTP and create reservation",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"guest_name\": \"Jordan Lee\",\n  \"phone_number\": \"+14155552671\",\n  \"email\": \"guest@example.com\",\n  \"guests\": 2,\n  \"date\": \"2026-10-27\",\n  \"slot\": \"18:00\",\n  \"special_notes\": \"Window seat if available\",\n  \"otp\": \"{{otp}}\",\n  \"request_id\": \"{{requestId}}\"\n}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/public/restaurants/{{slug}}/bookings"
+      },
+      "response": [
+        { "name": "Reservation created", "status": "Created", "code": 201, "body": "{\n  \"success\": true,\n  \"data\": { \"booking_reference\": \"123\", \"date\": \"2026-10-27\", \"slot\": \"18:00\", \"reservation_start\": \"2026-10-27T18:00:00.000Z\", \"reservation_end\": \"2026-10-27T19:30:00.000Z\", \"guests\": 2 }\n}" },
+        { "name": "Invalid or expired OTP", "status": "Unauthorized", "code": 401, "body": "{\n  \"success\": false,\n  \"error\": { \"code\": \"INVALID_OTP\", \"message\": \"Verification code is incorrect\" }\n}" },
+        { "name": "Slot no longer available", "status": "Conflict", "code": 409, "body": "{\n  \"success\": false,\n  \"error\": { \"code\": \"SLOT_UNAVAILABLE\", \"message\": \"slot is no longer available\" }\n}" }
+      ]
+    },
+    {
+      "name": "Update restaurant slug (authenticated)",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"slug\": \"roasted-beans-cafe\"\n}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/settings/slug"
+      },
+      "response": [
+        { "name": "Saved", "status": "OK", "code": 200, "body": "{\n  \"success\": true,\n  \"data\": { \"slug\": \"roasted-beans-cafe\", \"public_booking_url\": \"https://bookdine.example.com/book/roasted-beans-cafe\" }\n}" },
+        { "name": "Invalid slug", "status": "Bad Request", "code": 400, "body": "{\n  \"success\": false,\n  \"error\": { \"code\": \"INVALID_RESTAURANT_SLUG\", \"message\": \"slug must contain only URL-safe letters, numbers, and hyphens; spaces are normalized to hyphens\" }\n}" },
+        { "name": "Slug already in use", "status": "Conflict", "code": 409, "body": "{\n  \"success\": false,\n  \"error\": { \"code\": \"DUPLICATE_SLUG\", \"message\": \"That restaurant slug is already in use\" }\n}" }
+      ]
+    }
+  ]
+}
